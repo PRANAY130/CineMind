@@ -1,0 +1,6 @@
+{
+  "name": "CineMind",
+  "description": "AI-powered video analysis and interaction platform.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["AI Video Analysis", "Emotion Tracking", "Interactive Transcript"]
+}

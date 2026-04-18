@@ -1,0 +1,71 @@
+@import "tailwindcss";
+
+@theme {
+  --color-background: #0F172A;
+  --color-foreground: #F8FAFC;
+  
+  --color-primary: #A855F7;
+  --color-primary-foreground: #FFFFFF;
+  
+  --color-secondary: rgba(255, 255, 255, 0.03);
+  --color-secondary-foreground: #F8FAFC;
+  
+  --color-accent: #3B82F6;
+  --color-accent-foreground: #FFFFFF;
+  
+  --color-muted: #94A3B8;
+  --color-muted-foreground: #64748B;
+  
+  --color-border: rgba(255, 255, 255, 0.1);
+  --color-input: rgba(255, 255, 255, 0.05);
+  
+  --radius-lg: 1rem;
+  --radius-md: 0.75rem;
+  --radius-sm: 0.5rem;
+}
+
+@layer base {
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-family: 'Inter', sans-serif;
+  }
+}
+
+@layer components {
+  .glass-panel {
+    @apply bg-white/[0.02] backdrop-blur-2xl border border-white/10 rounded-2xl shadow-[0_8px_32px_0_rgba(0,0,0,0.36)];
+  }
+
+  .glass-sidebar {
+    @apply bg-white/[0.01] backdrop-blur-3xl border-r border-white/5;
+  }
+
+  .glass-header {
+    @apply bg-white/[0.01] backdrop-blur-3xl border-b border-white/5;
+  }
+  
+  .accent-gradient {
+    @apply bg-gradient-to-br from-[#A855F7] to-[#3B82F6];
+  }
+  
+  .accent-text {
+    @apply bg-clip-text text-transparent bg-gradient-to-br from-[#A855F7] to-[#3B82F6];
+  }
+  
+  .timestamp-badge {
+    @apply inline-block px-1.5 py-0.5 bg-white/10 rounded font-mono text-[#60A5FA] text-[10px] mx-0.5 hover:bg-white/20 transition-colors;
+  }
+
+  .high-density-text {
+    @apply text-[11px] leading-tight text-slate-400 font-medium;
+  }
+}
+
+@keyframes pulse-slow {
+  0%, 100% { transform: scale(1); opacity: 0.3; }
+  50% { transform: scale(1.2); opacity: 0.5; }
+}
+
+.animate-pulse-slow {
+  animation: pulse-slow 8s ease-in-out infinite;
+}

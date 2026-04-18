@@ -1,0 +1,21 @@
+services:
+  - type: web
+    name: cinemind-api
+    env: docker
+    plan: free
+    autoDeploy: false
+    envVars:
+      - key: PORT
+        value: 8000
+    dockerCommand: "uvicorn main:app --host 0.0.0.0 --port $PORT"
+    disk:
+      name: chroma-data
+      mountPath: /data/chroma
+      sizeGB: 1
+    
+  - type: worker
+    name: cinemind-worker
+    env: docker
+    plan: free
+    autoDeploy: false
+    dockerCommand: "celery -A workers.celery_app worker --loglevel=info"
