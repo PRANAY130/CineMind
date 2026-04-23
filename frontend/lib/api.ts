@@ -1,36 +1,33 @@
 /**
  * Central API bridge between Next.js frontend and FastAPI backend.
- * Automatically attaches Bearer token from localStorage to every request.
+ * Gets the Better Auth session token and attaches it as Bearer to every request.
  */
+import { authClient } from './auth-client'
 
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000'
 
-function getToken(): string | null {
-  if (typeof window === 'undefined') return null
-  return localStorage.getItem('cinemind_token')
-}
-
-export function setToken(token: string) {
-  localStorage.setItem('cinemind_token', token)
-}
-
-export function clearToken() {
-  localStorage.removeItem('cinemind_token')
+async function getSessionToken(): Promise<string | null> {
+  try {
+    const res = await authClient.getSession()
+    return res?.data?.session?.token ?? null
+  } catch {
+    return null
+  }
 }
 
 async function apiFetch<T>(
   path: string,
   options: RequestInit = {}
 ): Promise<T> {
-  const token = getToken()
-  const headers: HeadersInit = {
-    ...(options.headers || {}),
+  const token = await getSessionToken()
+  const headers: Record<string, string> = {
+    ...(options.headers as Record<string, string> || {}),
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
   }
 
   // Don't set Content-Type for FormData (browser sets it with boundary)
   if (!(options.body instanceof FormData)) {
-    (headers as Record<string, string>)['Content-Type'] = 'application/json'
+    headers['Content-Type'] = 'application/json'
   }
 
   const res = await fetch(`${BACKEND_URL}${path}`, {
@@ -44,12 +41,6 @@ async function apiFetch<T>(
   }
 
   return res.json()
-}
-
-// ─── Auth ────────────────────────────────────────────────────────────────────
-
-export async function verifySession() {
-  return apiFetch<{ status: string; user_id: string }>('/auth/me')
 }
 
 // ─── Videos ──────────────────────────────────────────────────────────────────

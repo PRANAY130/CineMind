@@ -22,13 +22,13 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
     try {
       setIsLoading(true)
       setError('')
-      // Use Better Auth Google social sign-in
+      // signIn.social() triggers a full browser redirect to Google.
+      // After Google completes, it redirects back to callbackURL ('/').
+      // The useEffect in page.tsx then detects the active session and
+      // navigates to the dashboard automatically.
       await authClient.signIn.social({ provider: 'google', callbackURL: '/' })
-      // Token is managed via cookies by Better Auth; call onLogin to update app state
-      onLogin()
     } catch (err: any) {
       setError(err?.message || 'Google login failed. Please try again.')
-    } finally {
       setIsLoading(false)
     }
   }

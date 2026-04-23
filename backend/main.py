@@ -1,3 +1,6 @@
+from dotenv import load_dotenv
+load_dotenv()  # Must be first — loads .env before any other module reads os.getenv()
+
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from routers import auth, videos, chat

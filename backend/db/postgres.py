@@ -14,24 +14,25 @@ async def get_db_pool():
 async def init_db():
     pool = await get_db_pool()
     async with pool.acquire() as conn:
-        # Neon Auth automatically provisions the users table.
+        # Neon Auth manages the "user" table externally.
+        # We store user_id as TEXT to match Neon Auth's UUID-based user IDs.
         await conn.execute('''
             CREATE TABLE IF NOT EXISTS videos (
                 id SERIAL PRIMARY KEY,
-                user_id INTEGER REFERENCES users(id),
+                user_id TEXT,
                 title VARCHAR(255),
                 r2_url TEXT,
                 duration_sec INTEGER,
-                status VARCHAR(50),
+                status VARCHAR(50) DEFAULT 'processing',
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         ''')
         await conn.execute('''
             CREATE TABLE IF NOT EXISTS jobs (
                 id SERIAL PRIMARY KEY,
-                video_id INTEGER REFERENCES videos(id),
+                video_id INTEGER REFERENCES videos(id) ON DELETE CASCADE,
                 step VARCHAR(100),
-                progress_pct INTEGER,
+                progress_pct INTEGER DEFAULT 0,
                 error TEXT,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
@@ -39,7 +40,7 @@ async def init_db():
         await conn.execute('''
             CREATE TABLE IF NOT EXISTS chapters (
                 id SERIAL PRIMARY KEY,
-                video_id INTEGER REFERENCES videos(id),
+                video_id INTEGER REFERENCES videos(id) ON DELETE CASCADE,
                 title VARCHAR(255),
                 summary TEXT,
                 start_time INTEGER,

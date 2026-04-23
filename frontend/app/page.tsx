@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import LandingPage from '@/components/cine-mind/LandingPage'
 import LoginPage from '@/components/cine-mind/LoginPage'
 import Dashboard from '@/components/cine-mind/Dashboard'
@@ -8,11 +8,23 @@ import VideoWorkspace from '@/components/cine-mind/VideoWorkspace'
 import ProfilePage from '@/components/cine-mind/ProfilePage'
 import Sidebar from '@/components/cine-mind/Sidebar'
 import Header from '@/components/cine-mind/Header'
+import { authClient } from '@/lib/auth-client'
 
 type AppState = 'landing' | 'login' | 'dashboard' | 'workspace' | 'profile'
 
 export default function Page() {
   const [state, setState] = useState<AppState>('landing')
+
+  // On every page load (including after Google OAuth redirect),
+  // check if the user has an active Better Auth session.
+  // If yes → go straight to dashboard, skipping the landing page.
+  useEffect(() => {
+    authClient.getSession().then((session) => {
+      if (session?.data?.session) {
+        setState('dashboard')
+      }
+    })
+  }, [])
   const [selectedVideo, setSelectedVideo] = useState<any>(null)
 
   const handleGetStarted = () => {
@@ -23,7 +35,8 @@ export default function Page() {
     setState('dashboard')
   }
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    await authClient.signOut()
     setState('landing')
     setSelectedVideo(null)
   }
