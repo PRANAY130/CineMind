@@ -17,6 +17,7 @@ interface VideoItem {
   duration: string
   status: 'ready' | 'processing'
   date: string
+  r2_url?: string
 }
 
 interface DashboardProps {
@@ -33,6 +34,7 @@ export default function Dashboard({ onSelectVideo }: DashboardProps) {
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
+    let intervalId: NodeJS.Timeout;
     const loadVideos = async () => {
       try {
         const data = await fetchVideos()
@@ -44,8 +46,17 @@ export default function Dashboard({ onSelectVideo }: DashboardProps) {
           duration: v.duration_sec ? `${Math.floor(v.duration_sec / 60)}:${String(v.duration_sec % 60).padStart(2, '0')}` : '--:--',
           status: v.status === 'ready' ? 'ready' : 'processing',
           date: v.created_at ? new Date(v.created_at).toLocaleDateString() : 'Unknown',
+          r2_url: v.r2_url,
         }))
         setVideos(mapped)
+        
+        if (mapped.some(v => v.status === 'processing')) {
+          if (!intervalId) {
+            intervalId = setInterval(loadVideos, 5000)
+          }
+        } else if (intervalId) {
+          clearInterval(intervalId)
+        }
       } catch (err) {
         console.error('Failed to load videos:', err)
         setVideos([])
@@ -54,6 +65,9 @@ export default function Dashboard({ onSelectVideo }: DashboardProps) {
       }
     }
     loadVideos()
+    return () => {
+      if (intervalId) clearInterval(intervalId)
+    }
   }, [])
 
   const handleFileUpload = async (file: File) => {
@@ -71,6 +85,7 @@ export default function Dashboard({ onSelectVideo }: DashboardProps) {
         duration: v.duration_sec ? `${Math.floor(v.duration_sec / 60)}:${String(v.duration_sec % 60).padStart(2, '0')}` : '--:--',
         status: v.status === 'ready' ? 'ready' : 'processing',
         date: v.created_at ? new Date(v.created_at).toLocaleDateString() : 'Unknown',
+        r2_url: v.r2_url,
       }))
       setVideos(mapped)
     } catch (err: any) {
@@ -175,7 +190,8 @@ export default function Dashboard({ onSelectVideo }: DashboardProps) {
                 key={video.id}
                 whileHover={{ y: -5 }}
                 onClick={() => video.status === 'ready' && onSelectVideo(video)}
-                className="cursor-pointer group"
+                className={`group ${video.status === 'ready' ? 'cursor-pointer' : 'cursor-not-allowed opacity-80'}`}
+                title={video.status === 'processing' ? 'Video is still processing' : ''}
               >
                 <Card className="overflow-hidden glass-panel border-white/5 group-hover:border-purple-500/40 transition-all ring-1 ring-white/5 group-hover:ring-white/10">
                   <div className="relative aspect-video">

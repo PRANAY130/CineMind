@@ -62,6 +62,10 @@ export async function fetchVideo(videoId: number) {
   return apiFetch<any>(`/videos/${videoId}`)
 }
 
+export async function fetchTranscript(videoId: number) {
+  return apiFetch<any[]>(`/videos/${videoId}/transcript`)
+}
+
 // ─── Chat (RAG via Groq Llama 3) ─────────────────────────────────────────────
 
 export async function chatWithVideo(videoId: number, query: string) {
@@ -77,7 +81,8 @@ export function connectProgressSocket(
   videoId: number,
   onProgress: (data: { step: string; progress_pct: number }) => void
 ): WebSocket {
-  const wsUrl = `${BACKEND_URL.replace('http', 'ws')}/ws/progress/${videoId}`
+  const protocol = BACKEND_URL.startsWith('https') ? 'wss' : 'ws'
+  const wsUrl = `${protocol}://${BACKEND_URL.replace(/^https?:\/\//, '')}/ws/progress/${videoId}`
   const ws = new WebSocket(wsUrl)
   ws.onmessage = (event) => {
     try {

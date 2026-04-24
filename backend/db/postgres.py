@@ -6,10 +6,15 @@ load_dotenv()
 
 NEON_DB_URL = os.getenv("NEON_DB_URL")
 
+_pool = None
+
 async def get_db_pool():
+    global _pool
     if not NEON_DB_URL:
         raise ValueError("NEON_DB_URL is not set")
-    return await asyncpg.create_pool(dsn=NEON_DB_URL)
+    if _pool is None:
+        _pool = await asyncpg.create_pool(dsn=NEON_DB_URL, min_size=1, max_size=5)
+    return _pool
 
 async def init_db():
     pool = await get_db_pool()
@@ -48,4 +53,3 @@ async def init_db():
                 order_index INTEGER
             )
         ''')
-    await pool.close()

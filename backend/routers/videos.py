@@ -12,12 +12,14 @@ load_dotenv()
 router = APIRouter(prefix="/videos", tags=["videos"])
 
 def get_r2_client():
+    from botocore.config import Config
     return boto3.client(
         "s3",
         endpoint_url=os.getenv("CLOUDFLARE_R2_ENDPOINT"),
         aws_access_key_id=os.getenv("CLOUDFLARE_R2_ACCESS_KEY"),
         aws_secret_access_key=os.getenv("CLOUDFLARE_R2_SECRET_KEY"),
         region_name="auto",
+        config=Config(signature_version="s3v4"),
     )
 
 @router.post("/upload")
@@ -33,16 +35,23 @@ async def upload_video(
     r2_key = f"videos/{user_id}/{uuid.uuid4()}.{file_ext}"
 
     # Upload to Cloudflare R2
+    print(f"Starting upload for user {user_id}")
     try:
         r2 = get_r2_client()
         contents = await file.read()
-        r2.put_object(Bucket=bucket, Key=r2_key, Body=contents, ContentType=file.content_type)
+        print(f"File read complete, size: {len(contents)} bytes. Uploading to R2...")
+        import asyncio
+        await asyncio.to_thread(r2.put_object, Bucket=bucket, Key=r2_key, Body=contents, ContentType=file.content_type)
         r2_url = f"{os.getenv('CLOUDFLARE_R2_ENDPOINT')}/{bucket}/{r2_key}"
+        print(f"R2 upload success: {r2_url}")
     except Exception as e:
+        print(f"R2 upload exception: {e}")
         raise HTTPException(status_code=500, detail=f"R2 upload failed: {str(e)}")
 
     # Create NeonDB record
+    print("Getting db pool...")
     pool = await get_db_pool()
+    print("Acquiring connection...")
     async with pool.acquire() as conn:
         row = await conn.fetchrow(
             """INSERT INTO videos (user_id, title, r2_url, status)
@@ -50,7 +59,6 @@ async def upload_video(
             user_id, file.filename or "Untitled", r2_url
         )
         video_id = row["id"]
-    await pool.close()
 
     # Dispatch Celery pipeline task
     run_video_pipeline.delay(video_id, r2_url)
@@ -67,7 +75,6 @@ async def list_videos(user: dict = Depends(get_current_user)):
             "SELECT * FROM videos WHERE user_id = $1 ORDER BY created_at DESC",
             user_id
         )
-    await pool.close()
     return [dict(r) for r in rows]
 
 
@@ -80,7 +87,27 @@ async def get_video(video_id: int, user: dict = Depends(get_current_user)):
             "SELECT * FROM chapters WHERE video_id = $1 ORDER BY order_index",
             video_id
         )
-    await pool.close()
     if not video:
         raise HTTPException(status_code=404, detail="Video not found")
     return {**dict(video), "chapters": [dict(c) for c in chapters]}
+
+@router.get("/{video_id}/transcript")
+async def get_transcript(video_id: int):
+    try:
+        import firebase_admin
+        from firebase_admin import credentials, firestore as fs
+        import os
+        cert_path = os.getenv("FIREBASE_CERT_PATH", os.path.join(os.path.dirname(__file__), '..', 'firebase-adminsdk.json'))
+        if not firebase_admin._apps:
+            if os.path.exists(cert_path):
+                cred = credentials.Certificate(cert_path)
+                firebase_admin.initialize_app(cred)
+            else:
+                return []
+        db = fs.client()
+        doc = db.collection("transcripts").document(str(video_id)).get()
+        if doc.exists:
+            return doc.to_dict().get("segments", [])
+    except Exception as e:
+        print(f"Transcript fetch error: {e}")
+    return []

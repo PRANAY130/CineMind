@@ -25,18 +25,15 @@ async def get_current_user(
     token = credentials.credentials
 
     pool = await get_db_pool()
-    try:
-        async with pool.acquire() as conn:
-            # Look up the session token in the Better Auth session table
-            row = await conn.fetchrow(
-                '''SELECT s."userId", s."expiresAt", u.name, u.email, u.image
-                   FROM session s
-                   JOIN "user" u ON u.id = s."userId"
-                   WHERE s.token = $1''',
-                token
-            )
-    finally:
-        await pool.close()
+    async with pool.acquire() as conn:
+        # Look up the session token in the Better Auth session table
+        row = await conn.fetchrow(
+            '''SELECT s."userId", s."expiresAt", u.name, u.email, u.image
+               FROM session s
+               JOIN "user" u ON u.id = s."userId"
+               WHERE s.token = $1''',
+            token
+        )
 
     if not row:
         raise HTTPException(
@@ -46,7 +43,7 @@ async def get_current_user(
 
     # Check expiry
     from datetime import datetime, timezone
-    if row["expiresAt"].replace(tzinfo=timezone.utc) < datetime.now(timezone.utc):
+    if row["expiresAt"].astimezone(timezone.utc) < datetime.now(timezone.utc):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Session expired"

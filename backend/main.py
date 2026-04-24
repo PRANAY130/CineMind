@@ -38,10 +38,20 @@ active_connections: dict[int, WebSocket] = {}
 async def websocket_endpoint(websocket: WebSocket, video_id: int):
     await websocket.accept()
     active_connections[video_id] = websocket
+    from db.postgres import get_db_pool
+    import asyncio
+    
     try:
+        pool = await get_db_pool()
         while True:
-            # Wait for messages from client if necessary
-            data = await websocket.receive_text()
+            async with pool.acquire() as conn:
+                row = await conn.fetchrow("SELECT step, progress_pct FROM jobs WHERE video_id = $1 ORDER BY updated_at DESC LIMIT 1", video_id)
+            if row:
+                await websocket.send_json({"step": row["step"], "progress_pct": row["progress_pct"]})
+                if row["progress_pct"] == 100:
+                    while True:
+                        await asyncio.sleep(10)
+            await asyncio.sleep(2)
     except WebSocketDisconnect:
         if video_id in active_connections:
             del active_connections[video_id]

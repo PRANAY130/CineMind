@@ -28,6 +28,7 @@ interface VideoWorkspaceProps {
     title: string
     thumbnail: string
     duration: string
+    r2_url?: string
   }
   onBack: () => void
 }
@@ -45,6 +46,25 @@ export default function VideoWorkspace({ video, onBack }: VideoWorkspaceProps) {
   ])
   const [input, setInput] = useState('')
   const videoRef = useRef<HTMLVideoElement>(null)
+  const [chapters, setChapters] = useState<any[]>([])
+  const [transcript, setTranscript] = useState<any[]>([])
+
+  // Fetch real chapters and transcript
+  useEffect(() => {
+    const loadDetails = async () => {
+      try {
+        const { fetchVideo, fetchTranscript } = await import('@/lib/api')
+        const data = await fetchVideo(Number(video.id))
+        if (data.chapters) setChapters(data.chapters)
+        
+        const transData = await fetchTranscript(Number(video.id))
+        setTranscript(transData || [])
+      } catch (err) {
+        console.error('Failed to load video details', err)
+      }
+    }
+    loadDetails()
+  }, [video.id])
 
   // Connect WebSocket for live pipeline progress updates
   useEffect(() => {
@@ -111,7 +131,7 @@ export default function VideoWorkspace({ video, onBack }: VideoWorkspaceProps) {
             <Card className="relative flex-1 glass-panel overflow-hidden border-white/5 group bg-black/40">
               <video 
                 ref={videoRef}
-                src="https://storage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4"
+                src={video.r2_url || "https://storage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4"}
                 className="w-full h-full object-contain"
                 onTimeUpdate={(e) => setCurrentTime(e.currentTarget.currentTime)}
               />
@@ -246,25 +266,23 @@ export default function VideoWorkspace({ video, onBack }: VideoWorkspaceProps) {
               <TabsContent value="transcript" className="flex-1 overflow-hidden m-0">
                 <ScrollArea className="h-full p-4">
                   <div className="space-y-3">
-                    {[
-                      { time: '00:00', text: "Welcome everyone to today's session on the future of Generative AI." },
-                      { time: '00:15', text: "We're going to explore how these models are transforming the way we build software." },
-                      { time: '01:12', text: "First, let's look at the historical context of large language models." },
-                      { time: '02:45', text: "The breakthrough came with the transformer architecture in 2017." },
-                      { time: '04:12', text: "Since then, we've seen an exponential growth in parameter counts and capabilities." },
-                      { time: '05:30', text: "But it's not just about size; it's about how we interact with these systems." },
-                    ].map((item, i) => (
-                      <div 
-                        key={i} 
-                        className={`group flex gap-2.5 cursor-pointer p-1.5 rounded-lg transition-all ${currentTime >= (parseInt(item.time.split(':')[0])*60 + parseInt(item.time.split(':')[1])) ? 'bg-purple-500/10 border-l-2 border-purple-500' : 'hover:bg-white/5'}`}
-                        onClick={() => jumpToTimestamp(item.time)}
-                      >
-                        <span className="text-[10px] font-mono text-[#60A5FA] mt-0.5 opacity-80">{item.time}</span>
-                        <p className="high-density-text group-hover:text-white transition-colors">
-                          {item.text}
-                        </p>
-                      </div>
-                    ))}
+                    {transcript.length > 0 ? transcript.map((item, i) => {
+                      const timeStr = `${Math.floor(item.start / 60).toString().padStart(2, '0')}:${Math.floor(item.start % 60).toString().padStart(2, '0')}`
+                      return (
+                        <div 
+                          key={i} 
+                          className={`group flex gap-2.5 cursor-pointer p-1.5 rounded-lg transition-all ${currentTime >= item.start && currentTime <= item.end ? 'bg-purple-500/10 border-l-2 border-purple-500' : 'hover:bg-white/5'}`}
+                          onClick={() => jumpToTimestamp(timeStr)}
+                        >
+                          <span className="text-[10px] font-mono text-[#60A5FA] mt-0.5 opacity-80">{timeStr}</span>
+                          <p className="high-density-text group-hover:text-white transition-colors">
+                            {item.text}
+                          </p>
+                        </div>
+                      )
+                    }) : (
+                      <p className="text-sm text-slate-500 p-4">Loading transcript...</p>
+                    )}
                   </div>
                 </ScrollArea>
               </TabsContent>
@@ -272,24 +290,24 @@ export default function VideoWorkspace({ video, onBack }: VideoWorkspaceProps) {
               <TabsContent value="chapters" className="flex-1 overflow-hidden m-0">
                 <ScrollArea className="h-full p-4">
                   <div className="space-y-2.5">
-                    {[
-                      { time: '00:00', title: 'Introduction', desc: 'Session goals overview' },
-                      { time: '01:12', title: 'Historical Context', desc: 'Evolution of LLMs' },
-                      { time: '04:12', title: 'Efficiency Gains', desc: 'Productivity improvements' },
-                      { time: '08:45', title: 'Future Outlook', desc: 'The next 5 years' },
-                    ].map((chapter, i) => (
-                      <div 
-                        key={i} 
-                        className="p-2.5 rounded-xl border border-white/5 bg-white/[0.03] hover:border-purple-500/30 cursor-pointer transition-all group"
-                        onClick={() => jumpToTimestamp(chapter.time)}
-                      >
-                        <div className="flex items-center justify-between mb-0.5">
-                          <h4 className="font-bold text-[10px] text-slate-200 group-hover:text-purple-400">0{i+1}. {chapter.title}</h4>
-                          <span className="text-[9px] font-mono text-[#60A5FA] opacity-70">{chapter.time}</span>
+                    {chapters.length > 0 ? chapters.map((chapter, i) => {
+                      const timeStr = `${Math.floor(chapter.start_time / 60).toString().padStart(2, '0')}:${Math.floor(chapter.start_time % 60).toString().padStart(2, '0')}`
+                      return (
+                        <div 
+                          key={i} 
+                          className="p-2.5 rounded-xl border border-white/5 bg-white/[0.03] hover:border-purple-500/30 cursor-pointer transition-all group"
+                          onClick={() => jumpToTimestamp(timeStr)}
+                        >
+                          <div className="flex items-center justify-between mb-0.5">
+                            <h4 className="font-bold text-[10px] text-slate-200 group-hover:text-purple-400">0{i+1}. {chapter.title}</h4>
+                            <span className="text-[9px] font-mono text-[#60A5FA] opacity-70">{timeStr}</span>
+                          </div>
+                          <p className="text-[10px] text-slate-500 leading-tight">{chapter.summary}</p>
                         </div>
-                        <p className="text-[10px] text-slate-500 leading-tight">{chapter.desc}</p>
-                      </div>
-                    ))}
+                      )
+                    }) : (
+                      <p className="text-sm text-slate-500 p-4">Loading chapters...</p>
+                    )}
                   </div>
                 </ScrollArea>
               </TabsContent>
