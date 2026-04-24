@@ -48,6 +48,7 @@ export default function VideoWorkspace({ video, onBack }: VideoWorkspaceProps) {
   const videoRef = useRef<HTMLVideoElement>(null)
   const [chapters, setChapters] = useState<any[]>([])
   const [transcript, setTranscript] = useState<any[]>([])
+  const [streamUrl, setStreamUrl] = useState<string>('')
 
   // Fetch real chapters and transcript
   const loadDetails = useCallback(async () => {
@@ -55,6 +56,9 @@ export default function VideoWorkspace({ video, onBack }: VideoWorkspaceProps) {
       console.log(`[VideoWorkspace] Loading details for video ${video.id}`)
       const { fetchVideo, fetchTranscript } = await import('@/lib/api')
       const data = await fetchVideo(Number(video.id))
+      if (data.stream_url) {
+        setStreamUrl(data.stream_url)
+      }
       if (data.chapters) {
         console.log(`[VideoWorkspace] Loaded ${data.chapters.length} chapters`)
         setChapters(data.chapters)
@@ -141,6 +145,17 @@ export default function VideoWorkspace({ video, onBack }: VideoWorkspaceProps) {
     }
   }
 
+  const togglePlay = () => {
+    if (videoRef.current) {
+      if (isPlaying) {
+        videoRef.current.pause()
+      } else {
+        videoRef.current.play()
+      }
+      setIsPlaying(!isPlaying)
+    }
+  }
+
   return (
     <div className="flex flex-col h-full">
       {/* Workspace Grid */}
@@ -151,15 +166,18 @@ export default function VideoWorkspace({ video, onBack }: VideoWorkspaceProps) {
             <Card className="relative flex-1 glass-panel overflow-hidden border-white/5 group bg-black/40">
               <video 
                 ref={videoRef}
-                src={video.r2_url || "https://storage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4"}
-                className="w-full h-full object-contain"
+                src={streamUrl || video.stream_url || video.r2_url || "https://storage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4"}
+                className="w-full h-full object-contain bg-black/40"
                 onTimeUpdate={(e) => setCurrentTime(e.currentTarget.currentTime)}
               />
               
               {/* Custom Controls Overlay */}
               <div className="absolute bottom-0 left-0 right-0 h-12 bg-gradient-to-t from-black/60 to-transparent flex items-center px-4 gap-3">
-                <div className="w-7 h-7 bg-white rounded-full flex items-center justify-center cursor-pointer hover:scale-105 transition-transform" onClick={() => setIsPlaying(!isPlaying)}>
-                  <div className={`w-0 h-0 border-t-[5px] border-t-transparent border-b-[5px] border-b-transparent border-left-[8px] border-left-black ml-0.5 ${isPlaying ? 'hidden' : ''}`} />
+                <div className="w-7 h-7 bg-white rounded-full flex items-center justify-center cursor-pointer hover:scale-105 transition-transform" onClick={togglePlay}>
+                  {/* CSS Triangle for Play Icon */}
+                  {!isPlaying && (
+                    <div className="w-0 h-0 border-y-[5px] border-y-transparent border-l-[8px] border-l-black ml-0.5" />
+                  )}
                   {isPlaying && <Pause className="w-3.5 h-3.5 text-black fill-current" />}
                 </div>
                 

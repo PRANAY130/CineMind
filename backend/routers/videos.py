@@ -26,6 +26,15 @@ def get_r2_client():
         config=Config(signature_version="s3v4"),
     )
 
+def _parse_r2_key(r2_url: str) -> str:
+    from urllib.parse import urlparse
+    parsed = urlparse(r2_url)
+    path_no_slash = parsed.path.lstrip("/")
+    parts = path_no_slash.split("/", 1)
+    if len(parts) < 2:
+        raise ValueError(f"Cannot extract R2 key from URL: {r2_url}")
+    return parts[1]
+
 
 @router.post("/upload")
 async def upload_video(
@@ -112,7 +121,72 @@ async def get_video(video_id: int, user: dict = Depends(get_current_user)):
         )
     if not video:
         raise HTTPException(status_code=404, detail="Video not found")
-    return {**dict(video), "chapters": [dict(c) for c in chapters]}
+        
+    video_dict = dict(video)
+    
+    # Generate a pre-signed URL for streaming
+    try:
+        r2 = get_r2_client()
+        key = _parse_r2_key(video_dict["r2_url"])
+        bucket = os.getenv("CLOUDFLARE_R2_BUCKET", "videoanalyser")
+        presigned_url = r2.generate_presigned_url(
+            "get_object",
+            Params={"Bucket": bucket, "Key": key},
+            ExpiresIn=3600
+        )
+        video_dict["stream_url"] = presigned_url
+    except Exception as e:
+        print(f"[Videos] Failed to generate presigned URL: {e}")
+        video_dict["stream_url"] = video_dict["r2_url"]
+        
+    return {**video_dict, "chapters": [dict(c) for c in chapters]}
+
+@router.delete("/{video_id}")
+async def delete_video(video_id: int, user: dict = Depends(get_current_user)):
+    user_id = user.get("sub") or user.get("id", "anonymous")
+    print(f"[Videos] Deleting video_id={video_id} for user={user_id}")
+    
+    pool = await get_db_pool()
+    async with pool.acquire() as conn:
+        video = await conn.fetchrow("SELECT * FROM videos WHERE id=$1 AND user_id=$2", video_id, user_id)
+        if not video:
+            raise HTTPException(status_code=404, detail="Video not found")
+            
+        # 1. Delete from R2
+        try:
+            r2 = get_r2_client()
+            key = _parse_r2_key(video["r2_url"])
+            bucket = os.getenv("CLOUDFLARE_R2_BUCKET", "videoanalyser")
+            r2.delete_object(Bucket=bucket, Key=key)
+            print(f"[Videos] Deleted object from R2: {key}")
+        except Exception as e:
+            print(f"[Videos] ⚠ Failed to delete from R2: {e}")
+            
+        # 2. Delete from Firestore
+        try:
+            fs_db = get_firestore_client()
+            if fs_db:
+                fs_db.collection("transcripts").document(str(video_id)).delete()
+                print(f"[Videos] Deleted transcript from Firestore")
+        except Exception as e:
+            print(f"[Videos] ⚠ Failed to delete from Firestore: {e}")
+            
+        # 3. Delete from ChromaDB
+        try:
+            from db.chroma_db import get_video_chunks_collection
+            collection = get_video_chunks_collection()
+            existing = collection.get(where={"video_id": video_id})
+            if existing["ids"]:
+                collection.delete(ids=existing["ids"])
+                print(f"[Videos] Deleted {len(existing['ids'])} chunks from ChromaDB")
+        except Exception as e:
+            print(f"[Videos] ⚠ Failed to delete from ChromaDB: {e}")
+            
+        # 4. Delete from PostgreSQL (cascades to jobs and chapters)
+        await conn.execute("DELETE FROM videos WHERE id=$1", video_id)
+        print(f"[Videos] Deleted video record from DB")
+        
+    return {"status": "success", "message": "Video deleted"}
 
 
 @router.get("/{video_id}/transcript")

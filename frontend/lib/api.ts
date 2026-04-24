@@ -66,6 +66,12 @@ export async function fetchTranscript(videoId: number) {
   return apiFetch<any[]>(`/videos/${videoId}/transcript`)
 }
 
+export async function deleteVideo(videoId: number) {
+  return apiFetch<{ status: string; message: string }>(`/videos/${videoId}`, {
+    method: 'DELETE',
+  })
+}
+
 // ─── Chat (RAG via Groq Llama 3) ─────────────────────────────────────────────
 
 export async function chatWithVideo(videoId: number, query: string) {

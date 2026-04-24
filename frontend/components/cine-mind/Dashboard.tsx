@@ -5,10 +5,10 @@ import { motion } from 'motion/react'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { Upload, Video, Clock, CheckCircle2, Loader2, Plus, Search, Play } from 'lucide-react'
+import { Upload, Video, Clock, CheckCircle2, Loader2, Plus, Search, Play, Trash2 } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import Image from 'next/image'
-import { fetchVideos, uploadVideo } from '@/lib/api'
+import { fetchVideos, uploadVideo, deleteVideo } from '@/lib/api'
 
 interface VideoItem {
   id: string
@@ -100,6 +100,18 @@ export default function Dashboard({ onSelectVideo }: DashboardProps) {
     } finally {
       setIsUploading(false)
       setTimeout(() => setUploadProgress(''), 3000)
+    }
+  }
+
+  const handleDelete = async (e: React.MouseEvent, videoId: string) => {
+    e.stopPropagation()
+    if (!confirm('Are you sure you want to delete this video?')) return
+    try {
+      console.log(`[Dashboard] Deleting video ${videoId}`)
+      await deleteVideo(Number(videoId))
+      await loadVideos()
+    } catch (err) {
+      console.error('[Dashboard] Failed to delete video:', err)
     }
   }
 
@@ -212,6 +224,16 @@ export default function Dashboard({ onSelectVideo }: DashboardProps) {
                       className="object-cover transition-transform duration-700 blur-[0.5px] group-hover:blur-0 group-hover:scale-105"
                       referrerPolicy="no-referrer"
                     />
+                    <div className="absolute top-2 right-2 z-10 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <Button
+                        variant="destructive"
+                        size="icon"
+                        className="h-7 w-7 rounded-full bg-red-500/80 hover:bg-red-600 backdrop-blur-md"
+                        onClick={(e) => handleDelete(e, video.id)}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
                     <div className="absolute inset-0 bg-[#0F172A]/40 opacity-40 group-hover:opacity-0 transition-opacity" />
                     <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all scale-90 group-hover:scale-100">
                       <div className="w-10 h-10 rounded-full accent-gradient flex items-center justify-center shadow-2xl">
