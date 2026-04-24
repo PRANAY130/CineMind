@@ -25,6 +25,6 @@ def generate_chat_response(messages: list):
     client = get_groq_client()
     chat_completion = client.chat.completions.create(
         messages=messages,
-        model="llama3-70b-8192"
+        model="llama-3.3-70b-versatile"
     )
     return chat_completion.choices[0].message.content

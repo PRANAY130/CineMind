@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { motion } from 'motion/react'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
@@ -33,66 +33,73 @@ export default function Dashboard({ onSelectVideo }: DashboardProps) {
   const [searchQuery, setSearchQuery] = useState('')
   const fileInputRef = useRef<HTMLInputElement>(null)
 
-  useEffect(() => {
-    let intervalId: NodeJS.Timeout;
-    const loadVideos = async () => {
-      try {
-        const data = await fetchVideos()
-        // Map backend response to VideoItem shape
-        const mapped: VideoItem[] = (data || []).map((v: any) => ({
-          id: String(v.id),
-          title: v.title || 'Untitled',
-          thumbnail: `https://picsum.photos/seed/${v.id}/800/450`,
-          duration: v.duration_sec ? `${Math.floor(v.duration_sec / 60)}:${String(v.duration_sec % 60).padStart(2, '0')}` : '--:--',
-          status: v.status === 'ready' ? 'ready' : 'processing',
-          date: v.created_at ? new Date(v.created_at).toLocaleDateString() : 'Unknown',
-          r2_url: v.r2_url,
-        }))
-        setVideos(mapped)
-        
-        if (mapped.some(v => v.status === 'processing')) {
-          if (!intervalId) {
-            intervalId = setInterval(loadVideos, 5000)
-          }
-        } else if (intervalId) {
-          clearInterval(intervalId)
+  // Use a ref so the cleanup function always captures the current interval id
+  const intervalRef = useRef<NodeJS.Timeout | null>(null)
+
+  const mapVideos = (data: any[]): VideoItem[] =>
+    (data || []).map((v: any) => ({
+      id: String(v.id),
+      title: v.title || 'Untitled',
+      thumbnail: `https://picsum.photos/seed/${v.id}/800/450`,
+      duration: v.duration_sec
+        ? `${Math.floor(v.duration_sec / 60)}:${String(v.duration_sec % 60).padStart(2, '0')}`
+        : '--:--',
+      status: v.status === 'ready' ? 'ready' : 'processing',
+      date: v.created_at ? new Date(v.created_at).toLocaleDateString() : 'Unknown',
+      r2_url: v.r2_url,
+    }))
+
+  const loadVideos = useCallback(async () => {
+    try {
+      console.log('[Dashboard] Fetching videos...')
+      const data = await fetchVideos()
+      const mapped = mapVideos(data)
+      console.log(`[Dashboard] Loaded ${mapped.length} videos`)
+      setVideos(mapped)
+
+      // Auto-poll while any video is still processing
+      if (mapped.some(v => v.status === 'processing')) {
+        if (!intervalRef.current) {
+          console.log('[Dashboard] Starting 5s poll for processing videos')
+          intervalRef.current = setInterval(loadVideos, 5000)
         }
-      } catch (err) {
-        console.error('Failed to load videos:', err)
-        setVideos([])
-      } finally {
-        setIsLoadingVideos(false)
+      } else {
+        if (intervalRef.current) {
+          console.log('[Dashboard] All videos ready — stopping poll')
+          clearInterval(intervalRef.current)
+          intervalRef.current = null
+        }
       }
-    }
-    loadVideos()
-    return () => {
-      if (intervalId) clearInterval(intervalId)
+    } catch (err) {
+      console.error('[Dashboard] Failed to load videos:', err)
+      setVideos([])
+    } finally {
+      setIsLoadingVideos(false)
     }
   }, [])
+
+  useEffect(() => {
+    loadVideos()
+    return () => {
+      if (intervalRef.current) clearInterval(intervalRef.current)
+    }
+  }, [loadVideos])
 
   const handleFileUpload = async (file: File) => {
     try {
       setIsUploading(true)
       setUploadProgress('Uploading to cloud storage...')
-      const result = await uploadVideo(file)
+      console.log(`[Dashboard] Uploading file: ${file.name} (${file.size} bytes)`)
+      await uploadVideo(file)
       setUploadProgress('Processing started! Refreshing...')
-      // Refresh list
-      const data = await fetchVideos()
-      const mapped: VideoItem[] = (data || []).map((v: any) => ({
-        id: String(v.id),
-        title: v.title || 'Untitled',
-        thumbnail: `https://picsum.photos/seed/${v.id}/800/450`,
-        duration: v.duration_sec ? `${Math.floor(v.duration_sec / 60)}:${String(v.duration_sec % 60).padStart(2, '0')}` : '--:--',
-        status: v.status === 'ready' ? 'ready' : 'processing',
-        date: v.created_at ? new Date(v.created_at).toLocaleDateString() : 'Unknown',
-        r2_url: v.r2_url,
-      }))
-      setVideos(mapped)
+      console.log('[Dashboard] Upload complete — refreshing video list')
+      await loadVideos()
     } catch (err: any) {
-      console.error('Upload failed:', err)
+      console.error('[Dashboard] Upload failed:', err)
+      setUploadProgress(`Upload failed: ${err.message || 'Unknown error'}`)
     } finally {
       setIsUploading(false)
-      setUploadProgress('')
+      setTimeout(() => setUploadProgress(''), 3000)
     }
   }
 
@@ -147,6 +154,7 @@ export default function Dashboard({ onSelectVideo }: DashboardProps) {
         <motion.div
           onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
           onDragLeave={() => setIsDragging(false)}
+          onDrop={handleDrop}
           className={`
             relative h-48 rounded-2xl border-2 border-dashed transition-all duration-500 flex flex-col items-center justify-center gap-3 mb-10 overflow-hidden
             ${isDragging ? 'border-purple-500 bg-purple-500/10 scale-[1.005]' : 'border-white/5 bg-white/[0.02]'}
@@ -199,6 +207,8 @@ export default function Dashboard({ onSelectVideo }: DashboardProps) {
                       src={video.thumbnail} 
                       alt={video.title}
                       fill
+                      sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
+                      priority={true}
                       className="object-cover transition-transform duration-700 blur-[0.5px] group-hover:blur-0 group-hover:scale-105"
                       referrerPolicy="no-referrer"
                     />

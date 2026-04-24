@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
 import { motion, AnimatePresence } from 'motion/react'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
@@ -50,29 +50,49 @@ export default function VideoWorkspace({ video, onBack }: VideoWorkspaceProps) {
   const [transcript, setTranscript] = useState<any[]>([])
 
   // Fetch real chapters and transcript
-  useEffect(() => {
-    const loadDetails = async () => {
-      try {
-        const { fetchVideo, fetchTranscript } = await import('@/lib/api')
-        const data = await fetchVideo(Number(video.id))
-        if (data.chapters) setChapters(data.chapters)
-        
-        const transData = await fetchTranscript(Number(video.id))
-        setTranscript(transData || [])
-      } catch (err) {
-        console.error('Failed to load video details', err)
+  const loadDetails = useCallback(async () => {
+    try {
+      console.log(`[VideoWorkspace] Loading details for video ${video.id}`)
+      const { fetchVideo, fetchTranscript } = await import('@/lib/api')
+      const data = await fetchVideo(Number(video.id))
+      if (data.chapters) {
+        console.log(`[VideoWorkspace] Loaded ${data.chapters.length} chapters`)
+        setChapters(data.chapters)
       }
+      const transData = await fetchTranscript(Number(video.id))
+      console.log(`[VideoWorkspace] Loaded ${(transData || []).length} transcript segments`)
+      setTranscript(transData || [])
+    } catch (err) {
+      console.error('[VideoWorkspace] Failed to load video details:', err)
     }
-    loadDetails()
   }, [video.id])
 
-  // Connect WebSocket for live pipeline progress updates
   useEffect(() => {
+    loadDetails()
+  }, [loadDetails])
+
+  // Connect WebSocket only if the video is still being processed
+  useEffect(() => {
+    if (video.status === 'ready') {
+      console.log(`[WS] video ${video.id} is already ready — skipping WebSocket`)
+      return
+    }
+    console.log(`[WS] Connecting progress socket for video ${video.id}`)
     const ws = connectProgressSocket(Number(video.id), (data) => {
-      console.log('Pipeline progress:', data)
+      console.log('[WS] Pipeline progress:', data)
+      // When pipeline completes, reload chapters/transcript
+      if (data.progress_pct >= 100) {
+        console.log('[WS] Pipeline complete — reloading details')
+        loadDetails()
+      }
     })
-    return () => ws.close()
-  }, [video.id])
+    ws.onerror = (err) => console.error('[WS] WebSocket error:', err)
+    ws.onclose = () => console.log(`[WS] Socket closed for video ${video.id}`)
+    return () => {
+      console.log(`[WS] Closing socket for video ${video.id}`)
+      ws.close()
+    }
+  }, [video.id, video.status])
 
   const handleSendMessage = async () => {
     if (!input.trim()) return
