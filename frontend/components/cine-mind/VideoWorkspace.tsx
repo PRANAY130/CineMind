@@ -10,7 +10,7 @@ import { Input } from '@/components/ui/input'
 import { 
   Play, Pause, SkipBack, SkipForward, Volume2, Maximize, 
   MessageSquare, BookOpen, FileText, Send, ChevronLeft,
-  MoreHorizontal, Share2, Download, Settings
+  MoreHorizontal, Share2, Download, Settings, Loader2
 } from 'lucide-react'
 import EmotionTimeline from './EmotionTimeline'
 import { chatWithVideo, connectProgressSocket } from '@/lib/api'
@@ -49,6 +49,11 @@ export default function VideoWorkspace({ video, onBack }: VideoWorkspaceProps) {
   const [chapters, setChapters] = useState<any[]>([])
   const [transcript, setTranscript] = useState<any[]>([])
   const [streamUrl, setStreamUrl] = useState<string>('')
+  
+  // Processing States
+  const [processingStep, setProcessingStep] = useState<string>('Connecting to pipeline...')
+  const [processingProgress, setProcessingProgress] = useState<number>(0)
+  const [processingSeconds, setProcessingSeconds] = useState<number>(0)
 
   // Fetch real chapters and transcript
   const loadDetails = useCallback(async () => {
@@ -75,6 +80,17 @@ export default function VideoWorkspace({ video, onBack }: VideoWorkspaceProps) {
     loadDetails()
   }, [loadDetails])
 
+  // Processing Timer
+  useEffect(() => {
+    let interval: NodeJS.Timeout
+    if (video.status === 'processing' || processingProgress > 0 && processingProgress < 100) {
+      interval = setInterval(() => setProcessingSeconds(s => s + 1), 1000)
+    }
+    return () => {
+      if (interval) clearInterval(interval)
+    }
+  }, [video.status, processingProgress])
+
   // Connect WebSocket only if the video is still being processed
   useEffect(() => {
     if (video.status === 'ready') {
@@ -84,6 +100,9 @@ export default function VideoWorkspace({ video, onBack }: VideoWorkspaceProps) {
     console.log(`[WS] Connecting progress socket for video ${video.id}`)
     const ws = connectProgressSocket(Number(video.id), (data) => {
       console.log('[WS] Pipeline progress:', data)
+      if (data.step) setProcessingStep(data.step)
+      if (typeof data.progress_pct === 'number') setProcessingProgress(data.progress_pct)
+      
       // When pipeline completes, reload chapters/transcript
       if (data.progress_pct >= 100) {
         console.log('[WS] Pipeline complete — reloading details')
@@ -156,18 +175,49 @@ export default function VideoWorkspace({ video, onBack }: VideoWorkspaceProps) {
     }
   }
 
+  // Handle spacebar play/pause
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.code === 'Space' && e.target === document.body) {
+        e.preventDefault()
+        togglePlay()
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [isPlaying])
+
   return (
     <div className="flex flex-col h-full">
       {/* Workspace Grid */}
       <div className="flex-1 grid grid-cols-[1fr_300px] overflow-hidden p-3 gap-3">
-          {/* Left Column: Player & Timeline */}
-          <div className="flex flex-col gap-3 overflow-hidden">
-            {/* Video Player */}
-            <Card className="relative flex-1 glass-panel overflow-hidden border-white/5 group bg-black/40">
+        {/* Left Column: Player & Timeline */}
+        <div className="flex flex-col gap-3 overflow-hidden">
+          {/* Video Player */}
+          <Card className="relative flex-1 glass-panel overflow-hidden border-white/5 group bg-black/40">
+              {(video.status === 'processing' || (processingProgress > 0 && processingProgress < 100)) && (
+                <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-black/80 backdrop-blur-md">
+                  <Loader2 className="w-8 h-8 animate-spin text-purple-400 mb-4" />
+                  <div className="text-sm font-bold tracking-widest text-white uppercase mb-2">
+                    {processingStep}
+                  </div>
+                  <div className="w-64 h-2 bg-white/10 rounded-full overflow-hidden mb-4">
+                    <div 
+                      className="h-full accent-gradient transition-all duration-300"
+                      style={{ width: `${processingProgress}%` }}
+                    />
+                  </div>
+                  <div className="text-xs font-mono text-purple-300">
+                    Analysis Time: {Math.floor(processingSeconds / 60)}:{(processingSeconds % 60).toString().padStart(2, '0')}
+                  </div>
+                </div>
+              )}
+              
               <video 
                 ref={videoRef}
                 src={streamUrl || video.stream_url || video.r2_url || "https://storage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4"}
-                className="w-full h-full object-contain bg-black/40"
+                className="w-full h-full object-contain bg-black/40 cursor-pointer"
+                onClick={togglePlay}
                 onTimeUpdate={(e) => setCurrentTime(e.currentTarget.currentTime)}
               />
               
@@ -184,12 +234,16 @@ export default function VideoWorkspace({ video, onBack }: VideoWorkspaceProps) {
                 <div className="flex-1 h-0.5 bg-white/10 rounded-full relative">
                   <div 
                     className="absolute top-0 left-0 h-full accent-gradient rounded-full" 
-                    style={{ width: `${(currentTime / 600) * 100}%` }}
+                    style={{ width: `${videoRef.current?.duration ? (currentTime / videoRef.current.duration) * 100 : 0}%` }}
                   />
                 </div>
                 
                 <span className="text-[10px] font-mono font-medium text-white/80">
-                  {Math.floor(currentTime / 60)}:{Math.floor(currentTime % 60).toString().padStart(2, '0')} / {video.duration}
+                  {Math.floor(currentTime / 60)}:{Math.floor(currentTime % 60).toString().padStart(2, '0')} / {
+                    videoRef.current?.duration && !isNaN(videoRef.current.duration) 
+                      ? `${Math.floor(videoRef.current.duration / 60)}:${Math.floor(videoRef.current.duration % 60).toString().padStart(2, '0')}`
+                      : video.duration
+                  }
                 </span>
               </div>
             </Card>

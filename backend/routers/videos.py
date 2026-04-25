@@ -106,7 +106,33 @@ async def list_videos(user: dict = Depends(get_current_user)):
             user_id,
         )
     print(f"[Videos] Found {len(rows)} videos")
-    return [dict(r) for r in rows]
+    
+    # Generate presigned URLs for all videos so the frontend can use them as thumbnails
+    videos_list = []
+    r2 = None
+    bucket = os.getenv("CLOUDFLARE_R2_BUCKET", "videoanalyser")
+    
+    try:
+        r2 = get_r2_client()
+    except Exception:
+        pass
+        
+    for r in rows:
+        video_dict = dict(r)
+        if r2 and video_dict.get("r2_url"):
+            try:
+                key = _parse_r2_key(video_dict["r2_url"])
+                presigned_url = r2.generate_presigned_url(
+                    "get_object",
+                    Params={"Bucket": bucket, "Key": key},
+                    ExpiresIn=3600
+                )
+                video_dict["stream_url"] = presigned_url
+            except Exception:
+                pass
+        videos_list.append(video_dict)
+        
+    return videos_list
 
 
 @router.get("/{video_id}")

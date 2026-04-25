@@ -140,40 +140,64 @@ def run_video_pipeline(self, video_id: int, r2_url: str):
             file_size = os.path.getsize(local_video)
             print(f"[Pipeline]  Downloaded: {local_video}  ({file_size:,} bytes)")
 
-            #  STEP 2  Transcribe with Groq Whisper (no FFmpeg needed) 
-            # Groq's Whisper API accepts video files (mp4, webm, mov, etc.)
-            # directly  no need to extract audio separately.
-            update_progress("Transcribing with Groq Whisper...", 25)
+            #  STEP 2  Extract and Chunk Audio with FFmpeg 
+            update_progress("Extracting audio chunks...", 15)
+            import subprocess
+            import glob
+            
+            chunk_pattern = os.path.join(tmpdir, "chunk_%03d.mp3")
+            ffmpeg_exe = r"D:\FFmpeg\ffmpeg-8.1-essentials_build\bin\ffmpeg.exe"
+            if not os.path.exists(ffmpeg_exe):
+                ffmpeg_exe = "ffmpeg"
+                
+            ffmpeg_cmd = [
+                ffmpeg_exe, "-y", "-i", local_video,
+                "-vn", "-c:a", "libmp3lame", "-b:a", "64k",
+                "-f", "segment", "-segment_time", "300",
+                chunk_pattern
+            ]
+            try:
+                subprocess.run(ffmpeg_cmd, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            except Exception as e:
+                print(f"[Pipeline] FFmpeg chunking failed: {e}")
+                raise Exception(f"FFmpeg failed to extract audio: {e}")
+            
+            chunks = sorted(glob.glob(os.path.join(tmpdir, "chunk_*.mp3")))
+            print(f"[Pipeline]  Extracted {len(chunks)} audio chunks")
+
             transcript_text = ""
             segments = []
+            
+            for i, chunk_file in enumerate(chunks):
+                pct = 25 + int((i / len(chunks)) * 20)
+                update_progress(f"Transcribing part {i+1} of {len(chunks)}...", pct)
+                
+                try:
+                    with open(chunk_file, "rb") as af:
+                        transcription = groq_client.audio.transcriptions.create(
+                            file=(os.path.basename(chunk_file), af.read()),
+                            model="whisper-large-v3",
+                            response_format="verbose_json",
+                        )
+                    
+                    text = transcription.text or ""
+                    transcript_text += text + " "
+                    
+                    raw_segs = getattr(transcription, "segments", None) or []
+                    offset_seconds = i * 300.0  # 5 minutes per chunk
+                    
+                    for s in raw_segs:
+                        if not isinstance(s, dict):
+                            s = dict(s)
+                        seg = _normalise_segment(s)
+                        seg["start"] += offset_seconds
+                        seg["end"] += offset_seconds
+                        segments.append(seg)
+                except Exception as e:
+                    print(f"[Pipeline]  Transcription error on chunk {i}: {e}")
+                    traceback.print_exc()
 
-            # Groq enforces a 25 MB file-size limit
-            MAX_BYTES = 24 * 1024 * 1024   # 24 MB safety margin
-            transcribe_path = local_video
-            if file_size > MAX_BYTES:
-                print(f"[Pipeline]   File > 25 MB  truncating for Whisper")
-                trunc_path = os.path.join(tmpdir, f"trunc_{video_id}.mp4")
-                with open(local_video, "rb") as fin, open(trunc_path, "wb") as fout:
-                    fout.write(fin.read(MAX_BYTES))
-                transcribe_path = trunc_path
-
-            try:
-                print(f"[Pipeline]   Sending {os.path.getsize(transcribe_path):,} bytes to Groq Whisper")
-                with open(transcribe_path, "rb") as af:
-                    transcription = groq_client.audio.transcriptions.create(
-                        file=(os.path.basename(transcribe_path), af.read()),
-                        model="whisper-large-v3",
-                        response_format="verbose_json",
-                    )
-                transcript_text = transcription.text or ""
-                raw_segs = getattr(transcription, "segments", None) or []
-                segments = [_normalise_segment(s) for s in raw_segs]
-                print(f"[Pipeline]  Transcription: {len(transcript_text)} chars, "
-                      f"{len(segments)} segments")
-            except Exception as e:
-                print(f"[Pipeline]   Transcription error (non-fatal): {e}")
-                traceback.print_exc()
-                transcript_text = f"[Transcription failed: {str(e)[:200]}]"
+            print(f"[Pipeline]  Total Transcription: {len(transcript_text)} chars, {len(segments)} segments")
 
             #  STEP 3  Save transcript to Firestore 
             update_progress("Saving transcript to Firestore...", 45)

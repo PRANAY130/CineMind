@@ -18,6 +18,7 @@ interface VideoItem {
   status: 'ready' | 'processing'
   date: string
   r2_url?: string
+  stream_url?: string
 }
 
 interface DashboardProps {
@@ -40,7 +41,8 @@ export default function Dashboard({ onSelectVideo }: DashboardProps) {
     (data || []).map((v: any) => ({
       id: String(v.id),
       title: v.title || 'Untitled',
-      thumbnail: `https://picsum.photos/seed/${v.id}/800/450`,
+      thumbnail: v.stream_url || v.r2_url,
+      stream_url: v.stream_url,
       duration: v.duration_sec
         ? `${Math.floor(v.duration_sec / 60)}:${String(v.duration_sec % 60).padStart(2, '0')}`
         : '--:--',
@@ -209,20 +211,17 @@ export default function Dashboard({ onSelectVideo }: DashboardProps) {
               <motion.div
                 key={video.id}
                 whileHover={{ y: -5 }}
-                onClick={() => video.status === 'ready' && onSelectVideo(video)}
-                className={`group ${video.status === 'ready' ? 'cursor-pointer' : 'cursor-not-allowed opacity-80'}`}
-                title={video.status === 'processing' ? 'Video is still processing' : ''}
+                onClick={() => onSelectVideo(video)}
+                className="group cursor-pointer"
               >
                 <Card className="overflow-hidden glass-panel border-white/5 group-hover:border-purple-500/40 transition-all ring-1 ring-white/5 group-hover:ring-white/10">
                   <div className="relative aspect-video">
-                    <Image 
-                      src={video.thumbnail} 
-                      alt={video.title}
-                      fill
-                      sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
-                      priority={true}
-                      className="object-cover transition-transform duration-700 blur-[0.5px] group-hover:blur-0 group-hover:scale-105"
-                      referrerPolicy="no-referrer"
+                    <video 
+                      src={`${video.stream_url || video.thumbnail}#t=1.0`} 
+                      className="w-full h-full object-cover transition-transform duration-700 blur-[0.5px] group-hover:blur-0 group-hover:scale-105"
+                      preload="metadata"
+                      muted
+                      playsInline
                     />
                     <div className="absolute top-2 right-2 z-10 opacity-0 group-hover:opacity-100 transition-opacity">
                       <Button
