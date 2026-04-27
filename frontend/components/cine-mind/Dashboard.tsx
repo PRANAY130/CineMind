@@ -26,13 +26,9 @@ interface DashboardProps {
 }
 
 export default function Dashboard({ onSelectVideo }: DashboardProps) {
-  const [isDragging, setIsDragging] = useState(false)
   const [videos, setVideos] = useState<VideoItem[]>([])
   const [isLoadingVideos, setIsLoadingVideos] = useState(true)
-  const [isUploading, setIsUploading] = useState(false)
-  const [uploadProgress, setUploadProgress] = useState('')
   const [searchQuery, setSearchQuery] = useState('')
-  const fileInputRef = useRef<HTMLInputElement>(null)
 
   // Use a ref so the cleanup function always captures the current interval id
   const intervalRef = useRef<NodeJS.Timeout | null>(null)
@@ -87,24 +83,6 @@ export default function Dashboard({ onSelectVideo }: DashboardProps) {
     }
   }, [loadVideos])
 
-  const handleFileUpload = async (file: File) => {
-    try {
-      setIsUploading(true)
-      setUploadProgress('Uploading to cloud storage...')
-      console.log(`[Dashboard] Uploading file: ${file.name} (${file.size} bytes)`)
-      await uploadVideo(file)
-      setUploadProgress('Processing started! Refreshing...')
-      console.log('[Dashboard] Upload complete — refreshing video list')
-      await loadVideos()
-    } catch (err: any) {
-      console.error('[Dashboard] Upload failed:', err)
-      setUploadProgress(`Upload failed: ${err.message || 'Unknown error'}`)
-    } finally {
-      setIsUploading(false)
-      setTimeout(() => setUploadProgress(''), 3000)
-    }
-  }
-
   const handleDelete = async (e: React.MouseEvent, videoId: string) => {
     e.stopPropagation()
     if (!confirm('Are you sure you want to delete this video?')) return
@@ -115,18 +93,6 @@ export default function Dashboard({ onSelectVideo }: DashboardProps) {
     } catch (err) {
       console.error('[Dashboard] Failed to delete video:', err)
     }
-  }
-
-  const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault()
-    setIsDragging(false)
-    const file = e.dataTransfer.files[0]
-    if (file) handleFileUpload(file)
-  }
-
-  const handleFileBrowse = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (file) handleFileUpload(file)
   }
 
   const filteredVideos = videos.filter(v =>
@@ -153,48 +119,10 @@ export default function Dashboard({ onSelectVideo }: DashboardProps) {
                 onChange={(e) => setSearchQuery(e.target.value)}
               />
             </div>
-            <Button 
-              className="accent-gradient border-none h-9 text-xs font-bold px-4 shadow-lg shadow-purple-500/20"
-              onClick={() => fileInputRef.current?.click()}
-              disabled={isUploading}
-            >
-              <Plus className="w-3.5 h-3.5 mr-1.5" />
-              Upload Node
-            </Button>
           </div>
         </div>
 
-        {/* Upload Zone */}
-        <motion.div
-          onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
-          onDragLeave={() => setIsDragging(false)}
-          onDrop={handleDrop}
-          className={`
-            relative h-48 rounded-2xl border-2 border-dashed transition-all duration-500 flex flex-col items-center justify-center gap-3 mb-10 overflow-hidden
-            ${isDragging ? 'border-purple-500 bg-purple-500/10 scale-[1.005]' : 'border-white/5 bg-white/[0.02]'}
-          `}
-        >
-          <input ref={fileInputRef} type="file" accept="video/*" className="hidden" onChange={handleFileBrowse} />
-          {isUploading ? (
-            <>
-              <Loader2 className="w-6 h-6 animate-spin text-purple-400" />
-              <p className="text-xs font-bold text-purple-300 tracking-wider">{uploadProgress}</p>
-            </>
-          ) : (
-            <>
-              <div className={`p-3 rounded-xl ${isDragging ? 'accent-gradient text-white' : 'bg-white/5 text-slate-500'} transition-all shadow-xl`}>
-                <Upload className="w-6 h-6" />
-              </div>
-              <div className="text-center">
-                <p className="text-sm font-bold tracking-tight">Drop video packet for analysis</p>
-                <p className="text-[10px] text-slate-500 uppercase font-bold tracking-widest mt-1">MP4, MOV, or WebM • Max 2GB</p>
-              </div>
-              <Button variant="link" className="text-purple-400 text-xs font-bold hover:text-purple-300 transition-colors" onClick={() => fileInputRef.current?.click()}>
-                Browse local storage
-              </Button>
-            </>
-          )}
-        </motion.div>
+
 
         {/* Video Grid */}
         {isLoadingVideos ? (

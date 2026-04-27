@@ -58,6 +58,16 @@ export async function uploadVideo(file: File) {
   })
 }
 
+export async function uploadYouTubeVideo(url: string) {
+  return apiFetch<{ message: string; video_id: number }>('/videos/upload-youtube', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ url }),
+  })
+}
+
 export async function fetchVideo(videoId: number) {
   return apiFetch<any>(`/videos/${videoId}`)
 }

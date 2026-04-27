@@ -2,7 +2,10 @@ import os
 import uuid
 import asyncio
 import boto3
-from fastapi import APIRouter, UploadFile, File, Depends, HTTPException
+from fastapi import APIRouter, UploadFile, File, Depends, HTTPException, Body
+from pydantic import BaseModel
+import yt_dlp
+import tempfile
 from botocore.config import Config
 from db.postgres import get_db_pool
 from db.firestore import get_firestore_client
@@ -93,6 +96,96 @@ async def upload_video(
         raise HTTPException(status_code=500, detail=f"Failed to start pipeline: {e}")
 
     return {"message": "Video uploaded, processing started", "video_id": video_id}
+
+class YouTubeUploadRequest(BaseModel):
+    url: str
+
+@router.post("/upload-youtube")
+async def upload_youtube(
+    request: YouTubeUploadRequest,
+    user: dict = Depends(get_current_user),
+):
+    user_id = user.get("sub") or user.get("id", "anonymous")
+    bucket = os.getenv("CLOUDFLARE_R2_BUCKET", "videoanalyser")
+    
+    print(f"[Upload] YouTube url='{request.url}'  user={user_id}")
+    
+    # ── Download with yt-dlp ───────────────────────────────────────────────
+    # Use worst or best[height<=480] to keep size small as requested
+    ydl_opts = {
+        'format': 'bestvideo[height<=480][ext=mp4]+bestaudio[ext=m4a]/best[height<=480][ext=mp4]/worst',
+        'outtmpl': os.path.join(tempfile.gettempdir(), '%(id)s.%(ext)s'),
+        'quiet': True,
+        'no_warnings': True,
+    }
+    
+    try:
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            info = await asyncio.to_thread(ydl.extract_info, request.url, download=True)
+            video_title = info.get('title', 'YouTube Video')
+            file_path = ydl.prepare_filename(info)
+            # if ext is webm, it's fine.
+            file_ext = file_path.rsplit(".", 1)[-1].lower()
+    except Exception as e:
+        print(f"[Upload] ✗ yt-dlp failed: {e}")
+        raise HTTPException(status_code=400, detail=f"Failed to download YouTube video: {e}")
+
+    r2_key = f"videos/{user_id}/{uuid.uuid4()}.{file_ext}"
+
+    # ── Upload to Cloudflare R2 ────────────────────────────────────────────
+    try:
+        r2 = get_r2_client()
+        with open(file_path, 'rb') as f:
+            contents = f.read()
+        print(f"[Upload] YouTube File read: {len(contents):,} bytes — uploading to R2…")
+        await asyncio.to_thread(
+            r2.put_object,
+            Bucket=bucket,
+            Key=r2_key,
+            Body=contents,
+            ContentType=f"video/{file_ext}",
+        )
+        endpoint = os.getenv("CLOUDFLARE_R2_ENDPOINT", "")
+        r2_url = f"{endpoint}/{bucket}/{r2_key}"
+        print(f"[Upload] ✓ R2 upload success: {r2_url}")
+    except Exception as e:
+        print(f"[Upload] ✗ R2 upload failed: {e}")
+        raise HTTPException(status_code=500, detail=f"R2 upload failed: {e}")
+    finally:
+        # Cleanup temp file
+        if os.path.exists(file_path):
+            try:
+                os.remove(file_path)
+            except:
+                pass
+
+    # ── Insert video record in NeonDB ─────────────────────────────────────
+    try:
+        pool = await get_db_pool()
+        async with pool.acquire() as conn:
+            row = await conn.fetchrow(
+                """INSERT INTO videos (user_id, title, r2_url, status)
+                   VALUES ($1, $2, $3, 'processing') RETURNING id""",
+                user_id,
+                video_title,
+                r2_url,
+            )
+            video_id = row["id"]
+        print(f"[Upload] ✓ NeonDB record created  video_id={video_id}")
+    except Exception as e:
+        print(f"[Upload] ✗ NeonDB insert failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Database error: {e}")
+
+    # ── Dispatch Celery pipeline task ─────────────────────────────────────
+    try:
+        run_video_pipeline.delay(video_id, r2_url)
+        print(f"[Upload] ✓ Pipeline task dispatched  video_id={video_id}")
+    except Exception as e:
+        print(f"[Upload] ✗ Celery dispatch failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to start pipeline: {e}")
+
+    return {"message": "YouTube video uploaded, processing started", "video_id": video_id}
+
 
 
 @router.get("/")

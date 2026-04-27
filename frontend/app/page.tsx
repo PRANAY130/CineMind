@@ -1,16 +1,18 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { BookOpen } from 'lucide-react'
 import LandingPage from '@/components/cine-mind/LandingPage'
 import LoginPage from '@/components/cine-mind/LoginPage'
 import Dashboard from '@/components/cine-mind/Dashboard'
+import UploadPage from '@/components/cine-mind/UploadPage'
 import VideoWorkspace from '@/components/cine-mind/VideoWorkspace'
 import ProfilePage from '@/components/cine-mind/ProfilePage'
 import Sidebar from '@/components/cine-mind/Sidebar'
 import Header from '@/components/cine-mind/Header'
 import { authClient } from '@/lib/auth-client'
 
-type AppState = 'landing' | 'login' | 'dashboard' | 'workspace' | 'profile'
+type AppState = 'landing' | 'login' | 'dashboard' | 'workspace' | 'profile' | 'library' | 'upload'
 
 export default function Page() {
   const [state, setState] = useState<AppState>('landing')
@@ -78,6 +80,10 @@ export default function Page() {
         showBack={state === 'workspace'} 
         onBack={handleBackToDashboard} 
         onHomeClick={handleBackToDashboard}
+        onWorkspaceClick={() => selectedVideo && setState('workspace')}
+        onUploadClick={() => setState('upload')}
+        onLibraryClick={() => setState('library')}
+        onSettingsClick={handleProfileClick}
         activeState={state}
       />
       
@@ -93,6 +99,10 @@ export default function Page() {
             <Dashboard onSelectVideo={handleSelectVideo} />
           )}
           
+          {state === 'upload' && (
+            <UploadPage onVideoQueued={handleSelectVideo} />
+          )}
+          
           {state === 'workspace' && selectedVideo && (
             <VideoWorkspace 
               video={selectedVideo} 
@@ -102,6 +112,14 @@ export default function Page() {
 
           {state === 'profile' && (
             <ProfilePage />
+          )}
+
+          {state === 'library' && (
+            <div className="p-8 flex flex-col items-center justify-center h-full text-center">
+              <BookOpen className="w-16 h-16 text-purple-500/20 mb-4" />
+              <h2 className="text-2xl font-bold text-white mb-2">Neural Knowledge Base</h2>
+              <p className="text-slate-400 max-w-md">Structured insights and cross-video knowledge extraction are being synthesized. This feature will be available in the next neural update.</p>
+            </div>
           )}
         </div>
       </main>
