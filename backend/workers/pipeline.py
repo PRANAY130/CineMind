@@ -199,22 +199,81 @@ def run_video_pipeline(self, video_id: int, r2_url: str):
 
             print(f"[Pipeline]  Total Transcription: {len(transcript_text)} chars, {len(segments)} segments")
 
-            #  STEP 3  Save transcript to Firestore 
-            update_progress("Saving transcript to Firestore...", 45)
+            #  STEP 3b  Emotion Analysis with Groq LLaMA 3 
+            update_progress("Analyzing emotions with LLaMA 3...", 50)
+            emotion_data = []
+            try:
+                if segments:
+                    # Build ~10 evenly-spaced buckets of segments for emotion analysis
+                    total_dur = segments[-1]["end"] if segments else 1
+                    bucket_count = min(len(segments), 10)
+                    bucket_size = total_dur / bucket_count
+                    
+                    emotion_prompt_lines = []
+                    for bi in range(bucket_count):
+                        bstart = bi * bucket_size
+                        bend = bstart + bucket_size
+                        bucket_segs = [s for s in segments if s["start"] >= bstart and s["start"] < bend]
+                        text = " ".join(s["text"] for s in bucket_segs).strip()
+                        mins = int(bstart) // 60
+                        secs = int(bstart) % 60
+                        emotion_prompt_lines.append(f"[{mins:02d}:{secs:02d}] {text[:300]}")
+                    
+                    emotion_resp = groq_client.chat.completions.create(
+                        model="llama-3.3-70b-versatile",
+                        messages=[
+                            {
+                                "role": "system",
+                                "content": (
+                                    "You are a speech emotion analysis AI. Given timestamped transcript segments, "
+                                    "analyze the emotional tone of the SPEAKER. Return a JSON array where each item has: "
+                                    "time (string MM:SS), timeSec (integer seconds), "
+                                    "joy (0-100), anger (0-100), engagement (0-100). "
+                                    "Be accurate — educational/neutral content should have low anger. "
+                                    "anger=high ONLY if the speaker is genuinely irritated or confrontational. "
+                                    "Return ONLY valid JSON array, no markdown fences."
+                                ),
+                            },
+                            {
+                                "role": "user",
+                                "content": f"Analyze emotion for each segment:\n\n" + "\n".join(emotion_prompt_lines),
+                            },
+                        ],
+                        temperature=0.2,
+                        max_tokens=1024,
+                    )
+                    raw_emotion = emotion_resp.choices[0].message.content.strip()
+                    match_e = re.search(r"\[.*\]", raw_emotion, re.DOTALL)
+                    raw_emotion = match_e.group(0) if match_e else raw_emotion
+                    emotion_data = json.loads(raw_emotion)
+                    print(f"[Pipeline]  Emotion analysis: {len(emotion_data)} buckets")
+                    
+                    # Save to Firestore
+                    from db.firestore import get_firestore_client
+                    fs_db = get_firestore_client()
+                    if fs_db:
+                        fs_db.collection("emotions").document(str(video_id)).set({
+                            "video_id": video_id,
+                            "emotion_data": emotion_data,
+                        })
+                        print(f"[Pipeline]  Firestore: emotion data saved")
+            except Exception as e:
+                print(f"[Pipeline]  Emotion analysis error (non-fatal): {e}")
+                traceback.print_exc()
+
+            # Save transcript to Firestore
             try:
                 from db.firestore import get_firestore_client
-                fs_db = get_firestore_client()
-                if fs_db:
-                    fs_db.collection("transcripts").document(str(video_id)).set({
+                fs_db_t = get_firestore_client()
+                if fs_db_t:
+                    fs_db_t.collection("transcripts").document(str(video_id)).set({
                         "video_id": video_id,
                         "full_text": transcript_text,
                         "segments": segments,
                     })
-                    print(f"[Pipeline]  Firestore: saved {len(segments)} segments")
-                else:
-                    print("[Pipeline]   Firestore unavailable  skipping")
+                    print(f"[Pipeline]  Firestore: saved {len(segments)} transcript segments")
             except Exception as e:
-                print(f"[Pipeline]   Firestore error (non-fatal): {e}")
+                print(f"[Pipeline]  Transcript Firestore error (non-fatal): {e}")
 
             #  STEP 4  Embed chunks into ChromaDB for RAG 
             update_progress("Indexing transcript for AI chat...", 58)
@@ -262,25 +321,39 @@ def run_video_pipeline(self, video_id: int, r2_url: str):
             if transcript_text and "Transcription failed" not in transcript_text:
                 try:
                     print("[Pipeline]   Calling Groq LLaMA 3 for chapter generation")
+                    
+                    # Build a timed transcript using REAL Whisper timestamps
+                    # so the AI picks accurate positions from actual data
+                    timed_lines = []
+                    for seg in segments[:200]:  # cap to avoid token overflow
+                        start_sec = int(seg.get("start", 0))
+                        mins = start_sec // 60
+                        secs = start_sec % 60
+                        timed_lines.append(f"[{mins:02d}:{secs:02d}] {seg.get('text', '').strip()}")
+                    timed_transcript = "\n".join(timed_lines)
+                    
                     chat_resp = groq_client.chat.completions.create(
                         model="llama-3.3-70b-versatile",
                         messages=[
                             {
                                 "role": "system",
                                 "content": (
-                                    "You are a video analysis AI. Given a transcript, return a JSON array "
-                                    "of chapters. Each chapter must have exactly these keys: "
-                                    "title (string), summary (string), start_time (integer seconds), "
+                                    "You are a video analysis AI. Given a timestamped transcript, "
+                                    "return a JSON array of chapters. Each chapter must have exactly "
+                                    "these keys: title (string), summary (string), "
+                                    "start_time (integer seconds from the transcript timestamps), "
                                     "end_time (integer seconds). "
-                                    "Return ONLY valid JSON array  no markdown fences, no explanation."
+                                    "IMPORTANT: Use the actual [MM:SS] timestamps from the transcript "
+                                    "to set start_time and end_time. Do NOT invent round numbers. "
+                                    "Return ONLY valid JSON array — no markdown fences, no explanation."
                                 ),
                             },
                             {
                                 "role": "user",
-                                "content": f"Create chapters for this transcript:\n\n{transcript_text[:6000]}",
+                                "content": f"Create chapters for this timestamped transcript:\n\n{timed_transcript[:6000]}",
                             },
                         ],
-                        temperature=0.3,
+                        temperature=0.2,
                         max_tokens=1024,
                     )
                     raw = chat_resp.choices[0].message.content.strip()

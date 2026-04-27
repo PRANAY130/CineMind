@@ -66,6 +66,10 @@ export async function fetchTranscript(videoId: number) {
   return apiFetch<any[]>(`/videos/${videoId}/transcript`)
 }
 
+export async function fetchEmotions(videoId: number) {
+  return apiFetch<any[]>(`/videos/${videoId}/emotions`)
+}
+
 export async function deleteVideo(videoId: number) {
   return apiFetch<{ status: string; message: string }>(`/videos/${videoId}`, {
     method: 'DELETE',

@@ -54,12 +54,16 @@ export default function VideoWorkspace({ video, onBack }: VideoWorkspaceProps) {
   const [processingStep, setProcessingStep] = useState<string>('Connecting to pipeline...')
   const [processingProgress, setProcessingProgress] = useState<number>(0)
   const [processingSeconds, setProcessingSeconds] = useState<number>(0)
+  const [emotionData, setEmotionData] = useState<any[]>([])
+  const [isEmotionsLoading, setIsEmotionsLoading] = useState(true)
+  // True once the WS reports 100% — hides the overlay regardless of video.status prop
+  const [isAnalysisComplete, setIsAnalysisComplete] = useState(video.status === 'ready')
 
   // Fetch real chapters and transcript
   const loadDetails = useCallback(async () => {
     try {
       console.log(`[VideoWorkspace] Loading details for video ${video.id}`)
-      const { fetchVideo, fetchTranscript } = await import('@/lib/api')
+      const { fetchVideo, fetchTranscript, fetchEmotions } = await import('@/lib/api')
       const data = await fetchVideo(Number(video.id))
       if (data.stream_url) {
         setStreamUrl(data.stream_url)
@@ -71,6 +75,19 @@ export default function VideoWorkspace({ video, onBack }: VideoWorkspaceProps) {
       const transData = await fetchTranscript(Number(video.id))
       console.log(`[VideoWorkspace] Loaded ${(transData || []).length} transcript segments`)
       setTranscript(transData || [])
+      
+      // Fetch real LLaMA-3 emotion data
+      try {
+        const emotions = await fetchEmotions(Number(video.id))
+        if (emotions && emotions.length > 0) {
+          console.log(`[VideoWorkspace] Loaded ${emotions.length} emotion buckets`)
+          setEmotionData(emotions)
+        }
+      } catch {
+        console.log('[VideoWorkspace] No emotion data yet')
+      } finally {
+        setIsEmotionsLoading(false)
+      }
     } catch (err) {
       console.error('[VideoWorkspace] Failed to load video details:', err)
     }
@@ -103,9 +120,10 @@ export default function VideoWorkspace({ video, onBack }: VideoWorkspaceProps) {
       if (data.step) setProcessingStep(data.step)
       if (typeof data.progress_pct === 'number') setProcessingProgress(data.progress_pct)
       
-      // When pipeline completes, reload chapters/transcript
+      // When pipeline completes, reload chapters/transcript and dismiss overlay
       if (data.progress_pct >= 100) {
         console.log('[WS] Pipeline complete — reloading details')
+        setIsAnalysisComplete(true)
         loadDetails()
       }
     })
@@ -195,7 +213,7 @@ export default function VideoWorkspace({ video, onBack }: VideoWorkspaceProps) {
         <div className="flex flex-col gap-3 overflow-hidden">
           {/* Video Player */}
           <Card className="relative flex-1 glass-panel overflow-hidden border-white/5 group bg-black/40">
-              {(video.status === 'processing' || (processingProgress > 0 && processingProgress < 100)) && (
+              {(!isAnalysisComplete && video.status === 'processing') && (
                 <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-black/80 backdrop-blur-md">
                   <Loader2 className="w-8 h-8 animate-spin text-purple-400 mb-4" />
                   <div className="text-sm font-bold tracking-widest text-white uppercase mb-2">
@@ -231,10 +249,26 @@ export default function VideoWorkspace({ video, onBack }: VideoWorkspaceProps) {
                   {isPlaying && <Pause className="w-3.5 h-3.5 text-black fill-current" />}
                 </div>
                 
-                <div className="flex-1 h-0.5 bg-white/10 rounded-full relative">
+                <div 
+                  className="flex-1 h-1.5 bg-white/10 rounded-full relative cursor-pointer group/seek"
+                  onClick={(e) => {
+                    if (!videoRef.current?.duration) return
+                    const rect = e.currentTarget.getBoundingClientRect()
+                    const clickX = e.clientX - rect.left
+                    const pct = Math.max(0, Math.min(1, clickX / rect.width))
+                    const seekTo = pct * videoRef.current.duration
+                    videoRef.current.currentTime = seekTo
+                    setCurrentTime(seekTo)
+                  }}
+                >
                   <div 
-                    className="absolute top-0 left-0 h-full accent-gradient rounded-full" 
+                    className="absolute top-0 left-0 h-full accent-gradient rounded-full transition-none" 
                     style={{ width: `${videoRef.current?.duration ? (currentTime / videoRef.current.duration) * 100 : 0}%` }}
+                  />
+                  {/* Hover scrub thumb */}
+                  <div
+                    className="absolute top-1/2 -translate-y-1/2 w-3 h-3 bg-white rounded-full shadow-lg opacity-0 group-hover/seek:opacity-100 transition-opacity pointer-events-none"
+                    style={{ left: `calc(${videoRef.current?.duration ? (currentTime / videoRef.current.duration) * 100 : 0}% - 6px)` }}
                   />
                 </div>
                 
@@ -268,7 +302,7 @@ export default function VideoWorkspace({ video, onBack }: VideoWorkspaceProps) {
                 </div>
               </div>
               <div className="flex-1 opacity-80">
-                <EmotionTimeline />
+                <EmotionTimeline emotionData={emotionData} segments={transcript} currentTime={currentTime} isLoading={isEmotionsLoading} />
               </div>
             </Card>
           </div>

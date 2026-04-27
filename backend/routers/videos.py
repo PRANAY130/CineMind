@@ -220,7 +220,6 @@ async def get_transcript(video_id: int):
     """Fetch transcript segments from Firestore."""
     print(f"[Videos] Fetching transcript for video_id={video_id}")
     try:
-        # Use the shared lazy Firestore client (avoids re-initialization race)
         fs_db = get_firestore_client()
         if not fs_db:
             print("[Videos] Firestore unavailable")
@@ -232,4 +231,22 @@ async def get_transcript(video_id: int):
             return segments
     except Exception as e:
         print(f"[Videos] Transcript fetch error: {e}")
+    return []
+
+
+@router.get("/{video_id}/emotions")
+async def get_emotions(video_id: int):
+    """Fetch LLaMA-3 generated emotion data from Firestore."""
+    print(f"[Videos] Fetching emotions for video_id={video_id}")
+    try:
+        fs_db = get_firestore_client()
+        if not fs_db:
+            return []
+        doc = fs_db.collection("emotions").document(str(video_id)).get()
+        if doc.exists:
+            emotion_data = doc.to_dict().get("emotion_data", [])
+            print(f"[Videos] Emotion data returned {len(emotion_data)} buckets")
+            return emotion_data
+    except Exception as e:
+        print(f"[Videos] Emotion fetch error: {e}")
     return []
