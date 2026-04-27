@@ -27,45 +27,51 @@ def generate_embeddings(text: str) -> Optional[list]:
     # HF API has a ~512-token input limit for this model
     truncated = text.strip()[:1500]
 
-    try:
-        response = requests.post(
-            HF_API_URL,
-            headers={
-                "Authorization": f"Bearer {hf_api_key}",
-                "Content-Type": "application/json",
-            },
-            json={
-                "inputs": [truncated],          # list input for feature-extraction
-                "options": {"wait_for_model": True},
-            },
-            timeout=45,
-        )
-        response.raise_for_status()
-        result = response.json()
+    max_retries = 3
+    for attempt in range(max_retries):
+        try:
+            response = requests.post(
+                HF_API_URL,
+                headers={
+                    "Authorization": f"Bearer {hf_api_key}",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "inputs": [truncated],          # list input for feature-extraction
+                    "options": {"wait_for_model": True},
+                },
+                timeout=90, # Increased timeout for cold boots
+            )
+            response.raise_for_status()
+            result = response.json()
+            break # Success, exit retry loop
+        except requests.exceptions.Timeout:
+            print(f"[Embedding] Timeout on attempt {attempt + 1}/{max_retries}")
+            if attempt == max_retries - 1:
+                return None
+        except Exception as e:
+            print(f"[Embedding] HuggingFace API error: {e}")
+            return None
 
-        # New router endpoint returns: [[float, float, ...]] for a single input
-        # i.e. a list containing one embedding vector
-        if isinstance(result, list) and result:
-            first = result[0]
-            if isinstance(first, float):
-                # Already a flat embedding vector
-                return result
-            if isinstance(first, list):
-                inner = first[0]
-                if isinstance(inner, float):
-                    # [[float, ...]] — standard sentence embedding, take first
-                    return first
-                if isinstance(inner, list):
-                    # [[[token_emb,...], ...]] — token-level, mean-pool
-                    dim = len(inner[0])
-                    return [statistics.mean(tok[i] for tok in inner) for i in range(dim)]
-        print(f"[Embedding] Unexpected HF response shape: {type(result)}")
-        return None
-
-    except Exception as e:
-        print(f"[Embedding] HuggingFace API error: {e}")
-        return None
-
+    # New router endpoint returns: [[float, float, ...]] for a single input
+    # i.e. a list containing one embedding vector
+    if isinstance(result, list) and result:
+        first = result[0]
+        if isinstance(first, float):
+            # Already a flat embedding vector
+            return result
+        if isinstance(first, list):
+            inner = first[0]
+            if isinstance(inner, float):
+                # [[float, ...]] — standard sentence embedding, take first
+                return first
+            if isinstance(inner, list):
+                # [[[token_emb,...], ...]] — token-level, mean-pool
+                dim = len(inner[0])
+                return [statistics.mean(tok[i] for tok in inner) for i in range(dim)]
+    
+    print(f"[Embedding] Unexpected HF response shape: {type(result)}")
+    return None
 
 def chunk_text(full_text: str, segments: list = None) -> list:
     """

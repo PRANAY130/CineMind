@@ -20,7 +20,6 @@ async def chat_with_video(request: ChatRequest):
       3. Pass chunks as context to Groq LLaMA 3 for a grounded answer
       4. Return the answer + video timestamps for referenced segments
     """
-    from groq import Groq
     from services.embedding import generate_embeddings
     from db.chroma_db import get_video_chunks_collection
 
@@ -60,8 +59,10 @@ async def chat_with_video(request: ChatRequest):
     except Exception as e:
         print(f"[Chat] ChromaDB search error: {e}")
 
-    # ── Step 3: Build prompt & call Groq LLaMA 3 ─────────────────────────
-    groq_client = Groq(api_key=os.getenv("GROQ_API_KEY"))
+    # ── Step 3: Build prompt & call Gemini ─────────────────────────
+    import google.generativeai as genai
+    genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
+    model = genai.GenerativeModel("gemini-3.1-pro-preview")
 
     if context_texts:
         context_block = "\n\n".join(
@@ -85,22 +86,22 @@ async def chat_with_video(request: ChatRequest):
         user_msg = query
 
     try:
-        def _call_groq():
-            return groq_client.chat.completions.create(
-                model="llama-3.3-70b-versatile",
-                messages=[
-                    {"role": "system", "content": system_msg},
-                    {"role": "user",   "content": user_msg},
+        def _call_gemini():
+            return model.generate_content(
+                contents=[
+                    {"role": "user", "parts": [f"System Instructions: {system_msg}\n\nUser: {user_msg}"]}
                 ],
-                temperature=0.4,
-                max_tokens=512,
+                generation_config=genai.types.GenerationConfig(
+                    temperature=0.4,
+                    max_output_tokens=512,
+                )
             )
 
-        response = await asyncio.to_thread(_call_groq)
-        answer = response.choices[0].message.content
-        print(f"[Chat] Groq answered: {len(answer)} chars, {len(timestamps)} timestamps")
+        response = await asyncio.to_thread(_call_gemini)
+        answer = response.text
+        print(f"[Chat] Gemini answered: {len(answer)} chars, {len(timestamps)} timestamps")
         return {"answer": answer, "timestamps": timestamps}
 
     except Exception as e:
-        print(f"[Chat] Groq API error: {e}")
+        print(f"[Chat] Gemini API error: {e}")
         return {"answer": f"I encountered an error communicating with the AI: {str(e)}", "timestamps": []}
