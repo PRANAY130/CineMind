@@ -13,6 +13,7 @@ import {
   MoreHorizontal, Share2, Download, Settings, Loader2
 } from 'lucide-react'
 import EmotionTimeline from './EmotionTimeline'
+import GlobalSummaryTab from './GlobalSummaryTab'
 import { chatWithVideo, connectProgressSocket } from '@/lib/api'
 
 interface Message {
@@ -209,83 +210,84 @@ export default function VideoWorkspace({ video, onBack }: VideoWorkspaceProps) {
     <div className="flex flex-col h-full">
       {/* Workspace Grid */}
       <div className="flex-1 grid grid-cols-[1fr_300px] overflow-hidden p-3 gap-3">
-        {/* Left Column: Player & Timeline */}
-        <div className="flex flex-col gap-3 overflow-hidden">
-          {/* Video Player */}
-          <Card className="relative flex-1 glass-panel overflow-hidden border-white/5 group bg-black/40">
-              {(!isAnalysisComplete && video.status === 'processing') && (
-                <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-black/80 backdrop-blur-md">
-                  <Loader2 className="w-8 h-8 animate-spin text-purple-400 mb-4" />
-                  <div className="text-sm font-bold tracking-widest text-white uppercase mb-2">
-                    {processingStep}
+        {/* Left Column: Player, Timeline & Detailed Summary (Scrollable) */}
+        <ScrollArea className="flex flex-col bg-black/20 rounded-xl border border-white/5 overflow-hidden">
+          <div className="flex flex-col gap-3 p-3">
+            {/* Top part: Video Player */}
+            <Card className="relative aspect-video glass-panel overflow-hidden border-white/5 group bg-black/40 shrink-0">
+                {(!isAnalysisComplete && video.status === 'processing') && (
+                  <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-black/80 backdrop-blur-md">
+                    <Loader2 className="w-8 h-8 animate-spin text-purple-400 mb-4" />
+                    <div className="text-sm font-bold tracking-widest text-white uppercase mb-2">
+                      {processingStep}
+                    </div>
+                    <div className="w-64 h-2 bg-white/10 rounded-full overflow-hidden mb-4">
+                      <div 
+                        className="h-full accent-gradient transition-all duration-300"
+                        style={{ width: `${processingProgress}%` }}
+                      />
+                    </div>
+                    <div className="text-xs font-mono text-purple-300">
+                      Analysis Time: {Math.floor(processingSeconds / 60)}:{(processingSeconds % 60).toString().padStart(2, '0')}
+                    </div>
                   </div>
-                  <div className="w-64 h-2 bg-white/10 rounded-full overflow-hidden mb-4">
+                )}
+                
+                <video 
+                  ref={videoRef}
+                  src={streamUrl || video.stream_url || video.r2_url || "https://storage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4"}
+                  className="w-full h-full object-contain bg-black/40 cursor-pointer"
+                  onClick={togglePlay}
+                  onTimeUpdate={(e) => setCurrentTime(e.currentTarget.currentTime)}
+                />
+                
+                {/* Custom Controls Overlay */}
+                <div className="absolute bottom-0 left-0 right-0 h-12 bg-gradient-to-t from-black/60 to-transparent flex items-center px-4 gap-3">
+                  <div className="w-7 h-7 bg-white rounded-full flex items-center justify-center cursor-pointer hover:scale-105 transition-transform" onClick={togglePlay}>
+                    {/* CSS Triangle for Play Icon */}
+                    {!isPlaying && (
+                      <div className="w-0 h-0 border-y-[5px] border-y-transparent border-l-[8px] border-l-black ml-0.5" />
+                    )}
+                    {isPlaying && <Pause className="w-3.5 h-3.5 text-black fill-current" />}
+                  </div>
+                  
+                  <div 
+                    className="flex-1 h-1.5 bg-white/10 rounded-full relative cursor-pointer group/seek"
+                    onClick={(e) => {
+                      if (!videoRef.current?.duration) return
+                      const rect = e.currentTarget.getBoundingClientRect()
+                      const clickX = e.clientX - rect.left
+                      const pct = Math.max(0, Math.min(1, clickX / rect.width))
+                      const seekTo = pct * videoRef.current.duration
+                      videoRef.current.currentTime = seekTo
+                      setCurrentTime(seekTo)
+                    }}
+                  >
                     <div 
-                      className="h-full accent-gradient transition-all duration-300"
-                      style={{ width: `${processingProgress}%` }}
+                      className="absolute top-0 left-0 h-full accent-gradient rounded-full transition-none" 
+                      style={{ width: `${videoRef.current?.duration ? (currentTime / videoRef.current.duration) * 100 : 0}%` }}
+                    />
+                    {/* Hover scrub thumb */}
+                    <div
+                      className="absolute top-1/2 -translate-y-1/2 w-3 h-3 bg-white rounded-full shadow-lg opacity-0 group-hover/seek:opacity-100 transition-opacity pointer-events-none"
+                      style={{ left: `calc(${videoRef.current?.duration ? (currentTime / videoRef.current.duration) * 100 : 0}% - 6px)` }}
                     />
                   </div>
-                  <div className="text-xs font-mono text-purple-300">
-                    Analysis Time: {Math.floor(processingSeconds / 60)}:{(processingSeconds % 60).toString().padStart(2, '0')}
-                  </div>
+                  
+                  <span className="text-[10px] font-mono font-medium text-white/80">
+                    {Math.floor(currentTime / 60)}:{Math.floor(currentTime % 60).toString().padStart(2, '0')} / {
+                      videoRef.current?.duration && !isNaN(videoRef.current.duration) 
+                        ? `${Math.floor(videoRef.current.duration / 60)}:${Math.floor(videoRef.current.duration % 60).toString().padStart(2, '0')}`
+                        : video.duration
+                    }
+                  </span>
                 </div>
-              )}
-              
-              <video 
-                ref={videoRef}
-                src={streamUrl || video.stream_url || video.r2_url || "https://storage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4"}
-                className="w-full h-full object-contain bg-black/40 cursor-pointer"
-                onClick={togglePlay}
-                onTimeUpdate={(e) => setCurrentTime(e.currentTarget.currentTime)}
-              />
-              
-              {/* Custom Controls Overlay */}
-              <div className="absolute bottom-0 left-0 right-0 h-12 bg-gradient-to-t from-black/60 to-transparent flex items-center px-4 gap-3">
-                <div className="w-7 h-7 bg-white rounded-full flex items-center justify-center cursor-pointer hover:scale-105 transition-transform" onClick={togglePlay}>
-                  {/* CSS Triangle for Play Icon */}
-                  {!isPlaying && (
-                    <div className="w-0 h-0 border-y-[5px] border-y-transparent border-l-[8px] border-l-black ml-0.5" />
-                  )}
-                  {isPlaying && <Pause className="w-3.5 h-3.5 text-black fill-current" />}
-                </div>
-                
-                <div 
-                  className="flex-1 h-1.5 bg-white/10 rounded-full relative cursor-pointer group/seek"
-                  onClick={(e) => {
-                    if (!videoRef.current?.duration) return
-                    const rect = e.currentTarget.getBoundingClientRect()
-                    const clickX = e.clientX - rect.left
-                    const pct = Math.max(0, Math.min(1, clickX / rect.width))
-                    const seekTo = pct * videoRef.current.duration
-                    videoRef.current.currentTime = seekTo
-                    setCurrentTime(seekTo)
-                  }}
-                >
-                  <div 
-                    className="absolute top-0 left-0 h-full accent-gradient rounded-full transition-none" 
-                    style={{ width: `${videoRef.current?.duration ? (currentTime / videoRef.current.duration) * 100 : 0}%` }}
-                  />
-                  {/* Hover scrub thumb */}
-                  <div
-                    className="absolute top-1/2 -translate-y-1/2 w-3 h-3 bg-white rounded-full shadow-lg opacity-0 group-hover/seek:opacity-100 transition-opacity pointer-events-none"
-                    style={{ left: `calc(${videoRef.current?.duration ? (currentTime / videoRef.current.duration) * 100 : 0}% - 6px)` }}
-                  />
-                </div>
-                
-                <span className="text-[10px] font-mono font-medium text-white/80">
-                  {Math.floor(currentTime / 60)}:{Math.floor(currentTime % 60).toString().padStart(2, '0')} / {
-                    videoRef.current?.duration && !isNaN(videoRef.current.duration) 
-                      ? `${Math.floor(videoRef.current.duration / 60)}:${Math.floor(videoRef.current.duration % 60).toString().padStart(2, '0')}`
-                      : video.duration
-                  }
-                </span>
-              </div>
             </Card>
 
             {/* Emotion Timeline */}
-            <Card className="h-[180px] glass-panel border-white/5 p-4 flex flex-col">
-              <div className="flex items-center justify-between mb-3">
-                <h3 className="text-[11px] font-bold text-slate-300 uppercase tracking-wider">Multimodal Emotion Timeline</h3>
+            <Card className="h-[140px] glass-panel border-white/5 p-3 flex flex-col shrink-0">
+              <div className="flex items-center justify-between mb-2">
+                <h3 className="text-[10px] font-black text-slate-300 uppercase tracking-[0.2em]">Emotion Synthesis Timeline</h3>
                 <div className="flex items-center gap-3">
                   <div className="flex items-center gap-1.5">
                     <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(34,197,94,0.4)]" />
@@ -301,34 +303,41 @@ export default function VideoWorkspace({ video, onBack }: VideoWorkspaceProps) {
                   </div>
                 </div>
               </div>
-              <div className="flex-1 opacity-80">
+              <div className="flex-1 opacity-80 overflow-hidden">
                 <EmotionTimeline emotionData={emotionData} segments={transcript} currentTime={currentTime} isLoading={isEmotionsLoading} />
               </div>
             </Card>
+
+            {/* Detailed Global Summary */}
+            <Card className="glass-panel border-white/5 overflow-hidden flex flex-col shrink-0 min-h-[500px]">
+              <GlobalSummaryTab videoId={video.id} />
+            </Card>
           </div>
+        </ScrollArea>
 
-          {/* Right Column: AI Engine */}
-          <Card className="glass-panel border-white/5 flex flex-col overflow-hidden">
-            <Tabs defaultValue="chat" className="flex-1 flex flex-col overflow-hidden">
-              <div className="p-2 border-b border-white/5">
-                <TabsList className="w-full bg-transparent h-auto p-0 gap-0.5">
-                  {[
-                    { val: 'transcript', label: 'Transcript' },
-                    { val: 'chapters', label: 'Chapters' },
-                    { val: 'chat', label: 'AI Chat' }
-                  ].map((tab) => (
-                    <TabsTrigger 
-                      key={tab.val} 
-                      value={tab.val} 
-                      className="flex-1 py-1.5 text-[10px] font-bold rounded-md data-[state=active]:bg-white/5 data-[state=active]:text-white text-slate-500 uppercase tracking-wider transition-all"
-                    >
-                      {tab.label}
-                    </TabsTrigger>
-                  ))}
-                </TabsList>
-              </div>
+        {/* Right Column: AI Engine */}
+        <Card className="glass-panel border-white/5 flex flex-col overflow-hidden">
+          <Tabs defaultValue="chat" className="flex-1 flex flex-col overflow-hidden">
+            <div className="p-2 border-b border-white/5">
+              <TabsList className="w-full bg-transparent h-auto p-0 gap-0.5">
+                {[
+                  { val: 'transcript', label: 'Transcript' },
+                  { val: 'chapters', label: 'Chapters' },
+                  { val: 'chat', label: 'AI Chat' }
+                ].map((tab) => (
+                  <TabsTrigger 
+                    key={tab.val} 
+                    value={tab.val} 
+                    className="flex-1 py-1.5 text-[10px] font-bold rounded-md data-[state=active]:bg-white/5 data-[state=active]:text-white text-slate-500 uppercase tracking-wider transition-all"
+                  >
+                    {tab.label}
+                  </TabsTrigger>
+                ))}
+              </TabsList>
+            </div>
 
-              <TabsContent value="chat" className="flex-1 flex flex-col overflow-hidden m-0 p-0">
+            <TabsContent value="chat" className="flex-1 flex flex-col overflow-hidden m-0 p-0">
+
                 <ScrollArea className="flex-1 p-4">
                   <div className="flex flex-col gap-3">
                     {messages.map((msg) => (

@@ -102,7 +102,7 @@ export default function EmotionTimeline({ segments = [], emotionData = [], curre
   return (
     <div className="h-full w-full">
       <ResponsiveContainer width="100%" height="100%" minHeight={120} minWidth={100}>
-        <AreaChart data={data} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
+        <AreaChart data={data} margin={{ top: 10, right: 10, left: 0, bottom: 20 }}>
           <defs>
             <linearGradient id="colorEngagement" x1="0" y1="0" x2="0" y2="1">
               <stop offset="5%" stopColor="#3B82F6" stopOpacity={0.3}/>
@@ -125,7 +125,7 @@ export default function EmotionTimeline({ segments = [], emotionData = [], curre
             axisLine={false}
             interval="preserveStartEnd"
           />
-          <YAxis hide domain={[0, 100]} />
+          <YAxis domain={[0, 100]} width={25} fontSize={9} tickLine={false} axisLine={false} stroke="#64748b" />
           <Tooltip
             contentStyle={{
               backgroundColor: 'rgba(15, 23, 42, 0.9)',

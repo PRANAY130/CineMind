@@ -142,11 +142,11 @@ export default function Dashboard({ onSelectVideo }: DashboardProps) {
                 onClick={() => onSelectVideo(video)}
                 className="group cursor-pointer"
               >
-                <Card className="overflow-hidden glass-panel border-white/5 group-hover:border-purple-500/40 transition-all ring-1 ring-white/5 group-hover:ring-white/10">
-                  <div className="relative aspect-video">
+                <Card className="overflow-hidden glass-panel border-white/5 group-hover:border-purple-500/40 transition-all ring-1 ring-white/5 group-hover:ring-white/10 h-full flex flex-col">
+                  <div className="relative w-full h-0 pb-[56.25%] overflow-hidden bg-black/20">
                     <video 
                       src={`${video.stream_url || video.thumbnail}#t=1.0`} 
-                      className="w-full h-full object-cover transition-transform duration-700 blur-[0.5px] group-hover:blur-0 group-hover:scale-105"
+                      className="absolute inset-0 w-full h-full object-cover transition-transform duration-700 blur-[0.5px] group-hover:blur-0 group-hover:scale-105"
                       preload="metadata"
                       muted
                       playsInline
@@ -172,16 +172,16 @@ export default function Dashboard({ onSelectVideo }: DashboardProps) {
                     </div>
                   </div>
                   <div className="p-4 bg-white/[0.01]">
-                    <div className="flex items-start justify-between gap-3 mb-3">
-                      <h3 className="font-bold text-sm tracking-tight leading-snug group-hover:text-purple-400 transition-colors">
+                    <div className="flex items-start justify-between gap-3 mb-3 h-[42px]">
+                      <h3 className="font-bold text-sm tracking-tight leading-snug group-hover:text-purple-400 transition-colors line-clamp-2 overflow-hidden">
                         {video.title}
                       </h3>
                       {video.status === 'ready' ? (
-                        <Badge className="bg-emerald-500/10 text-emerald-500 border-emerald-500/20 text-[9px] px-1.5 py-0 font-bold uppercase tracking-wider">
+                        <Badge className="bg-emerald-500/10 text-emerald-500 border-emerald-500/20 text-[9px] px-1.5 py-0 font-bold uppercase tracking-wider shrink-0 mt-0.5">
                           Active
                         </Badge>
                       ) : (
-                        <Badge className="bg-amber-500/10 text-amber-500 border-amber-500/20 text-[9px] px-1.5 py-0 font-bold uppercase tracking-wider">
+                        <Badge className="bg-amber-500/10 text-amber-500 border-amber-500/20 text-[9px] px-1.5 py-0 font-bold uppercase tracking-wider shrink-0 mt-0.5">
                           Processing
                         </Badge>
                       )}

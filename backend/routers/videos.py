@@ -343,3 +343,72 @@ async def get_emotions(video_id: int):
     except Exception as e:
         print(f"[Videos] Emotion fetch error: {e}")
     return []
+
+
+@router.get("/{video_id}/summary")
+async def get_summary(video_id: int):
+    """Fetch or generate a multi-lingual summary for a video."""
+    print(f"[Videos] Fetching global summary for video_id={video_id}")
+    try:
+        fs_db = get_firestore_client()
+        if not fs_db:
+            raise HTTPException(status_code=500, detail="Database unavailable")
+            
+        # 1. Check if summary already exists in cache
+        doc_ref = fs_db.collection("summaries").document(str(video_id))
+        doc = doc_ref.get()
+        if doc.exists:
+            print("[Videos] Returning cached summary from Firestore")
+            return doc.to_dict().get("data", {})
+
+        # 2. If not, fetch transcript to generate it
+        transcript_doc = fs_db.collection("transcripts").document(str(video_id)).get()
+        if not transcript_doc.exists:
+            raise HTTPException(status_code=404, detail="Transcript not found, cannot generate summary.")
+            
+        full_text = transcript_doc.to_dict().get("full_text", "")
+        if not full_text:
+            raise HTTPException(status_code=404, detail="Transcript is empty.")
+
+        print("[Videos] Generating new detailed multi-lingual summary via Gemini...")
+        import google.generativeai as genai
+        import json
+        import re
+        genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
+        model = genai.GenerativeModel("gemini-3.1-pro-preview")
+        
+        prompt = (
+            "You are an elite video content analyst. Analyze the following video transcript "
+            "and generate a comprehensive, high-density global summary.\n\n"
+            "STRUCTURE YOUR SUMMARY WITH THE FOLLOWING SECTIONS (using Markdown headers and bullets):\n"
+            "1. 🧠 **Executive Overview**: A 2-3 sentence high-level synthesis.\n"
+            "2. 📍 **Key Takeaways**: Bullet points of the most critical facts or events.\n"
+            "3. 🔍 **Detailed Analysis**: A deep dive into the underlying themes or arguments.\n"
+            "4. 💡 **Additional Context**: Any relevant background info or implications.\n\n"
+            "IMPORTANT: Return the output STRICTLY as a JSON object with the following keys: "
+            "\"English\", \"Spanish\", \"French\", \"Hindi\", and \"German\".\n"
+            "The values MUST be the detailed Markdown-formatted summary string in that specific language.\n\n"
+            f"Transcript:\n{full_text[:15000]}"
+        )
+
+        
+        response = model.generate_content(prompt)
+        raw = response.text.strip()
+        
+        # Clean up possible markdown formatting
+        match = re.search(r"\{.*\}", raw, re.DOTALL)
+        if match:
+            raw = match.group(0)
+            
+        summary_data = json.loads(raw)
+        
+        # 3. Cache the result in Firestore
+        doc_ref.set({"video_id": video_id, "data": summary_data})
+        print("[Videos] Summary generated and cached successfully.")
+        
+        return summary_data
+
+    except Exception as e:
+        print(f"[Videos] Summary generation error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+

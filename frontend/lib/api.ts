@@ -112,3 +112,14 @@ export function connectProgressSocket(
   }
   return ws
 }
+
+export async function fetchSummary(videoId: number) {
+  try {
+    return await apiFetch<any>(`/videos/${videoId}/summary`)
+  } catch (error: any) {
+    if (error.message && error.message.includes('404')) {
+      return null
+    }
+    throw error
+  }
+}
