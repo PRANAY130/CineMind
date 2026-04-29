@@ -62,7 +62,7 @@ async def chat_with_video(request: ChatRequest):
     # ── Step 3: Build prompt & call Gemini ─────────────────────────
     import google.generativeai as genai
     genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
-    model = genai.GenerativeModel("gemini-3.1-pro-preview")
+    model = genai.GenerativeModel("gemini-3-flash-preview")
 
     if context_texts:
         context_block = "\n\n".join(

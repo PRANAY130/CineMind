@@ -375,7 +375,7 @@ async def get_summary(video_id: int):
         import json
         import re
         genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
-        model = genai.GenerativeModel("gemini-3.1-pro-preview")
+        model = genai.GenerativeModel("gemini-3-flash-preview")
         
         prompt = (
             "You are an elite video content analyst. Analyze the following video transcript "

@@ -9,6 +9,7 @@ import { Upload, Video, Clock, CheckCircle2, Loader2, Plus, Search, Play, Trash2
 import { Input } from '@/components/ui/input'
 import Image from 'next/image'
 import { fetchVideos, uploadVideo, deleteVideo } from '@/lib/api'
+import ConfirmModal from './ConfirmModal'
 
 interface VideoItem {
   id: string
@@ -29,6 +30,10 @@ export default function Dashboard({ onSelectVideo }: DashboardProps) {
   const [videos, setVideos] = useState<VideoItem[]>([])
   const [isLoadingVideos, setIsLoadingVideos] = useState(true)
   const [searchQuery, setSearchQuery] = useState('')
+  
+  // Modal State
+  const [deleteId, setDeleteId] = useState<string | null>(null)
+  const [isDeleting, setIsDeleting] = useState(false)
 
   // Use a ref so the cleanup function always captures the current interval id
   const intervalRef = useRef<NodeJS.Timeout | null>(null)
@@ -83,15 +88,23 @@ export default function Dashboard({ onSelectVideo }: DashboardProps) {
     }
   }, [loadVideos])
 
-  const handleDelete = async (e: React.MouseEvent, videoId: string) => {
+  const handleDelete = (e: React.MouseEvent, videoId: string) => {
     e.stopPropagation()
-    if (!confirm('Are you sure you want to delete this video?')) return
+    setDeleteId(videoId)
+  }
+
+  const confirmDelete = async () => {
+    if (!deleteId) return
     try {
-      console.log(`[Dashboard] Deleting video ${videoId}`)
-      await deleteVideo(Number(videoId))
+      setIsDeleting(true)
+      console.log(`[Dashboard] Deleting video ${deleteId}`)
+      await deleteVideo(Number(deleteId))
       await loadVideos()
+      setDeleteId(null)
     } catch (err) {
       console.error('[Dashboard] Failed to delete video:', err)
+    } finally {
+      setIsDeleting(false)
     }
   }
 
@@ -203,6 +216,15 @@ export default function Dashboard({ onSelectVideo }: DashboardProps) {
           </div>
         )}
       </div>
+
+      <ConfirmModal 
+        isOpen={!!deleteId}
+        title="Delete Video?"
+        description="This action will permanently remove the video, transcript, and AI analysis. This cannot be undone."
+        isLoading={isDeleting}
+        onConfirm={confirmDelete}
+        onCancel={() => setDeleteId(null)}
+      />
     </div>
   )
 }
