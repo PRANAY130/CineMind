@@ -76,7 +76,7 @@ def _normalise_segment(seg) -> dict:
 #  Celery Task 
 
 @celery_app.task(bind=True, ignore_result=True)
-def run_video_pipeline(self, video_id: int, r2_url: str):
+def run_video_pipeline(self, video_id: int, r2_url: str, user_id: str = "anonymous"):
     """
     Full AI processing pipeline for a single video.
     All sub-steps are individually wrapped so one failure never kills the
@@ -252,10 +252,11 @@ def run_video_pipeline(self, video_id: int, r2_url: str):
                     from db.firestore import get_firestore_client
                     fs_db = get_firestore_client()
                     if fs_db:
-                        fs_db.collection("emotions").document(str(video_id)).set({
-                            "video_id": video_id,
-                            "emotion_data": emotion_data,
-                        })
+                        fs_db.collection("user").document(user_id).collection("videos").document(str(video_id)).set({
+                            "emotions": {
+                                "emotion_data": emotion_data
+                            }
+                        }, merge=True)
                         print(f"[Pipeline]  Firestore: emotion data saved")
             except Exception as e:
                 print(f"[Pipeline]  Emotion analysis error (non-fatal): {e}")
@@ -266,11 +267,12 @@ def run_video_pipeline(self, video_id: int, r2_url: str):
                 from db.firestore import get_firestore_client
                 fs_db_t = get_firestore_client()
                 if fs_db_t:
-                    fs_db_t.collection("transcripts").document(str(video_id)).set({
-                        "video_id": video_id,
-                        "full_text": transcript_text,
-                        "segments": segments,
-                    })
+                    fs_db_t.collection("user").document(user_id).collection("videos").document(str(video_id)).set({
+                        "transcript": {
+                            "full_text": transcript_text,
+                            "segments": segments
+                        }
+                    }, merge=True)
                     print(f"[Pipeline]  Firestore: saved {len(segments)} transcript segments")
             except Exception as e:
                 print(f"[Pipeline]  Transcript Firestore error (non-fatal): {e}")

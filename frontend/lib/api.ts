@@ -69,15 +69,15 @@ export async function uploadYouTubeVideo(url: string) {
 }
 
 export async function fetchVideo(videoId: number) {
-  return apiFetch<any>(`/videos/${videoId}`)
+  return apiFetch<any>(`/videos/${videoId}`, { cache: 'no-store' })
 }
 
 export async function fetchTranscript(videoId: number) {
-  return apiFetch<any[]>(`/videos/${videoId}/transcript`)
+  return apiFetch<any[]>(`/videos/${videoId}/transcript`, { cache: 'no-store' })
 }
 
 export async function fetchEmotions(videoId: number) {
-  return apiFetch<any[]>(`/videos/${videoId}/emotions`)
+  return apiFetch<any[]>(`/videos/${videoId}/emotions?t=${Date.now()}`, { cache: 'no-store' })
 }
 
 export async function deleteVideo(videoId: number) {
@@ -115,7 +115,7 @@ export function connectProgressSocket(
 
 export async function fetchSummary(videoId: number) {
   try {
-    return await apiFetch<any>(`/videos/${videoId}/summary`)
+    return await apiFetch<any>(`/videos/${videoId}/summary?t=${Date.now()}`, { cache: 'no-store' })
   } catch (error: any) {
     if (error.message && error.message.includes('404')) {
       return null
