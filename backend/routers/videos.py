@@ -89,7 +89,7 @@ async def upload_video(
 
     # ── Dispatch Celery pipeline task ─────────────────────────────────────
     try:
-        run_video_pipeline.delay(video_id, r2_url)
+        run_video_pipeline.delay(video_id, r2_url, user_id)
         print(f"[Upload] ✓ Pipeline task dispatched  video_id={video_id}")
     except Exception as e:
         print(f"[Upload] ✗ Celery dispatch failed: {e}")
@@ -178,7 +178,7 @@ async def upload_youtube(
 
     # ── Dispatch Celery pipeline task ─────────────────────────────────────
     try:
-        run_video_pipeline.delay(video_id, r2_url)
+        run_video_pipeline.delay(video_id, r2_url, user_id)
         print(f"[Upload] ✓ Pipeline task dispatched  video_id={video_id}")
     except Exception as e:
         print(f"[Upload] ✗ Celery dispatch failed: {e}")
@@ -285,8 +285,8 @@ async def delete_video(video_id: int, user: dict = Depends(get_current_user)):
         try:
             fs_db = get_firestore_client()
             if fs_db:
-                fs_db.collection("transcripts").document(str(video_id)).delete()
-                print(f"[Videos] Deleted transcript from Firestore")
+                fs_db.collection("user").document(user_id).collection("videos").document(str(video_id)).delete()
+                print(f"[Videos] Deleted video metadata document from Firestore")
         except Exception as e:
             print(f"[Videos] ⚠ Failed to delete from Firestore: {e}")
             
@@ -309,66 +309,88 @@ async def delete_video(video_id: int, user: dict = Depends(get_current_user)):
 
 
 @router.get("/{video_id}/transcript")
-async def get_transcript(video_id: int):
+async def get_transcript(video_id: int, user: dict = Depends(get_current_user)):
     """Fetch transcript segments from Firestore."""
-    print(f"[Videos] Fetching transcript for video_id={video_id}")
+    user_id = user.get("sub") or user.get("id", "anonymous")
+    print(f"[Videos] Fetching transcript for video_id={video_id} user={user_id}")
     try:
         fs_db = get_firestore_client()
         if not fs_db:
             print("[Videos] Firestore unavailable")
             return []
-        doc = fs_db.collection("transcripts").document(str(video_id)).get()
-        if doc.exists:
-            segments = doc.to_dict().get("segments", [])
-            print(f"[Videos] Transcript returned {len(segments)} segments")
+        doc = fs_db.collection("user").document(user_id).collection("videos").document(str(video_id)).get()
+        if doc.exists and "transcript" in doc.to_dict():
+            transcript_map = doc.to_dict().get("transcript", {})
+            segments = transcript_map.get("segments", [])
+            print(f"[Videos] Transcript returned {len(segments)} segments (new structure)")
             return segments
+        else:
+            print(f"[Videos] Transcript data not found in new structure for {video_id}. Doc exists: {doc.exists}")
+            return []
     except Exception as e:
         print(f"[Videos] Transcript fetch error: {e}")
-    return []
+        return []
 
 
 @router.get("/{video_id}/emotions")
-async def get_emotions(video_id: int):
-    """Fetch LLaMA-3 generated emotion data from Firestore."""
-    print(f"[Videos] Fetching emotions for video_id={video_id}")
+async def get_emotions(video_id: int, user: dict = Depends(get_current_user)):
+    user_id = user.get("sub") or user.get("id", "anonymous")
+    with open("get_emotions_log.txt", "a") as f:
+        f.write(f"\n--- Request for {video_id} by {user_id} ---\n")
     try:
         fs_db = get_firestore_client()
         if not fs_db:
+            with open("get_emotions_log.txt", "a") as f: f.write("No DB\n")
             return []
-        doc = fs_db.collection("emotions").document(str(video_id)).get()
+        doc = fs_db.collection("user").document(user_id).collection("videos").document(str(video_id)).get()
+        with open("get_emotions_log.txt", "a") as f: f.write(f"Doc exists: {doc.exists}\n")
+        
         if doc.exists:
-            emotion_data = doc.to_dict().get("emotion_data", [])
-            print(f"[Videos] Emotion data returned {len(emotion_data)} buckets")
-            return emotion_data
+            d = doc.to_dict()
+            with open("get_emotions_log.txt", "a") as f: f.write(f"Keys in doc: {list(d.keys())}\n")
+            if "emotions" in d:
+                emotions_map = d.get("emotions", {})
+                emotion_data = emotions_map.get("emotion_data", [])
+                with open("get_emotions_log.txt", "a") as f: f.write(f"Returning {len(emotion_data)} buckets\n")
+                return emotion_data
+            else:
+                with open("get_emotions_log.txt", "a") as f: f.write("No 'emotions' key\n")
+                return []
+        else:
+            with open("get_emotions_log.txt", "a") as f: f.write("Doc does not exist\n")
+            return []
     except Exception as e:
-        print(f"[Videos] Emotion fetch error: {e}")
-    return []
+        with open("get_emotions_log.txt", "a") as f: f.write(f"Error: {e}\n")
+        return []
 
 
 @router.get("/{video_id}/summary")
-async def get_summary(video_id: int):
+async def get_summary(video_id: int, user: dict = Depends(get_current_user)):
     """Fetch or generate a multi-lingual summary for a video."""
-    print(f"[Videos] Fetching global summary for video_id={video_id}")
+    user_id = user.get("sub") or user.get("id", "anonymous")
+    print(f"[Videos] Fetching global summary for video_id={video_id} user={user_id}")
     try:
         fs_db = get_firestore_client()
         if not fs_db:
             raise HTTPException(status_code=500, detail="Database unavailable")
             
-        # 1. Check if summary already exists in cache
-        doc_ref = fs_db.collection("summaries").document(str(video_id))
+        # 1. Check if summary already exists in cache (new structure)
+        doc_ref = fs_db.collection("user").document(user_id).collection("videos").document(str(video_id))
         doc = doc_ref.get()
-        if doc.exists:
-            print("[Videos] Returning cached summary from Firestore")
-            return doc.to_dict().get("data", {})
+        if doc.exists and "summary" in doc.to_dict():
+            summary_map = doc.to_dict().get("summary")
+            if summary_map and "data" in summary_map:
+                print("[Videos] Returning cached summary from Firestore (new structure)")
+                return summary_map["data"]
 
         # 2. If not, fetch transcript to generate it
-        transcript_doc = fs_db.collection("transcripts").document(str(video_id)).get()
-        if not transcript_doc.exists:
-            raise HTTPException(status_code=404, detail="Transcript not found, cannot generate summary.")
+        full_text = ""
+        if doc.exists and "transcript" in doc.to_dict():
+            transcript_map = doc.to_dict().get("transcript", {})
+            full_text = transcript_map.get("full_text", "")
             
-        full_text = transcript_doc.to_dict().get("full_text", "")
         if not full_text:
-            raise HTTPException(status_code=404, detail="Transcript is empty.")
+            raise HTTPException(status_code=404, detail="Transcript not found or empty, cannot generate summary.")
 
         print("[Videos] Generating new detailed multi-lingual summary via Gemini...")
         import google.generativeai as genai
@@ -403,7 +425,7 @@ async def get_summary(video_id: int):
         summary_data = json.loads(raw)
         
         # 3. Cache the result in Firestore
-        doc_ref.set({"video_id": video_id, "data": summary_data})
+        doc_ref.set({"summary": {"data": summary_data}}, merge=True)
         print("[Videos] Summary generated and cached successfully.")
         
         return summary_data
