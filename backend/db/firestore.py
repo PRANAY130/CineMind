@@ -1,4 +1,6 @@
 import os
+import json
+import base64
 import firebase_admin
 from firebase_admin import credentials, firestore
 
@@ -7,8 +9,10 @@ _initialized = False
 def _init_firebase() -> bool:
     """
     Lazily initialize Firebase Admin SDK on first use.
-    This is intentionally NOT called at module level so that load_dotenv()
-    in main.py / pipeline.py runs first and populates FIREBASE_CERT_PATH.
+
+    Supports two modes (checked in order):
+    1. FIREBASE_CERT_JSON env var: base64-encoded JSON — used in production (Render).
+    2. FIREBASE_CERT_PATH env var: path to a local JSON file — used in local dev.
     """
     global _initialized
     if _initialized:
@@ -17,10 +21,22 @@ def _init_firebase() -> bool:
         _initialized = True
         return True
 
+    # --- Mode 1: base64-encoded JSON in env var (production) ---
+    cert_json_b64 = os.getenv("FIREBASE_CERT_JSON")
+    if cert_json_b64:
+        try:
+            cert_dict = json.loads(base64.b64decode(cert_json_b64).decode("utf-8"))
+            cred = credentials.Certificate(cert_dict)
+            firebase_admin.initialize_app(cred)
+            _initialized = True
+            print("[Firestore] Firebase Admin SDK initialized from FIREBASE_CERT_JSON env var ✓")
+            return True
+        except Exception as e:
+            print(f"[Firestore] Failed to init from FIREBASE_CERT_JSON: {e}")
+            return False
+
+    # --- Mode 2: local file path (local development) ---
     cert_path = os.getenv("FIREBASE_CERT_PATH", "firebase-adminsdk.json")
-    if not cert_path:
-        print("[Firestore] WARNING: FIREBASE_CERT_PATH not set")
-        return False
 
     # Resolve relative path to the backend root directory
     if not os.path.isabs(cert_path):
@@ -28,7 +44,7 @@ def _init_firebase() -> bool:
         cert_path = os.path.join(backend_root, cert_path)
 
     if not os.path.exists(cert_path):
-        print(f"[Firestore] WARNING: cert file not found at '{cert_path}'")
+        print(f"[Firestore] WARNING: cert file not found at '{cert_path}' and FIREBASE_CERT_JSON not set")
         return False
 
     try:

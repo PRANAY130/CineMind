@@ -146,9 +146,13 @@ def run_video_pipeline(self, video_id: int, r2_url: str, user_id: str = "anonymo
             import glob
             
             chunk_pattern = os.path.join(tmpdir, "chunk_%03d.mp3")
-            ffmpeg_exe = r"D:\FFmpeg\ffmpeg-8.1-essentials_build\bin\ffmpeg.exe"
-            if not os.path.exists(ffmpeg_exe):
-                ffmpeg_exe = "ffmpeg"
+            
+            # Resolve ffmpeg: use system ffmpeg on Linux/Docker, or local Windows install
+            _win_ffmpeg = r"D:\FFmpeg\ffmpeg-8.1-essentials_build\bin\ffmpeg.exe"
+            if os.path.exists(_win_ffmpeg):
+                ffmpeg_exe = _win_ffmpeg  # Local Windows dev machine
+            else:
+                ffmpeg_exe = "ffmpeg"     # System PATH (Linux Docker / any OS with ffmpeg installed)
                 
             ffmpeg_cmd = [
                 ffmpeg_exe, "-y", "-i", local_video,

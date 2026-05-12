@@ -1,21 +1,81 @@
 services:
+  # ── FastAPI Web Server ─────────────────────────────────────────────────────
   - type: web
     name: cinemind-api
     env: docker
     plan: free
-    autoDeploy: false
-    envVars:
-      - key: PORT
-        value: 8000
+    autoDeploy: true
     dockerCommand: "uvicorn main:app --host 0.0.0.0 --port $PORT"
     disk:
       name: chroma-data
       mountPath: /data/chroma
       sizeGB: 1
-    
+    envVars:
+      - key: PORT
+        value: 8000
+      - key: CHROMA_DB_DIR
+        value: /data/chroma
+      # Firestore — base64 of firebase-adminsdk.json (set in Render dashboard)
+      - key: FIREBASE_CERT_JSON
+        sync: false
+      - key: FIREBASE_PROJECT_ID
+        sync: false
+      # NeonDB
+      - key: NEON_DB_URL
+        sync: false
+      - key: NEON_JWKS_URL
+        sync: false
+      # Upstash Redis (Celery broker)
+      - key: UPSTASH_REDIS_URL
+        sync: false
+      # Cloudflare R2 Storage
+      - key: CLOUDFLARE_R2_ENDPOINT
+        sync: false
+      - key: CLOUDFLARE_R2_ACCESS_KEY
+        sync: false
+      - key: CLOUDFLARE_R2_SECRET_KEY
+        sync: false
+      - key: CLOUDFLARE_R2_BUCKET
+        value: videoanalyser
+      # AI Providers
+      - key: GROQ_API_KEY
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: HUGGINGFACE_API_KEY
+        sync: false
+
+  # ── Celery Worker ──────────────────────────────────────────────────────────
   - type: worker
     name: cinemind-worker
     env: docker
     plan: free
-    autoDeploy: false
-    dockerCommand: "celery -A workers.celery_app worker --loglevel=info"
+    autoDeploy: true
+    # No --pool=solo on Linux — default prefork pool works correctly
+    dockerCommand: "celery -A workers.celery_app worker --loglevel=info --concurrency=1"
+    envVars:
+      # Firestore
+      - key: FIREBASE_CERT_JSON
+        sync: false
+      - key: FIREBASE_PROJECT_ID
+        sync: false
+      # NeonDB
+      - key: NEON_DB_URL
+        sync: false
+      # Upstash Redis (Celery broker)
+      - key: UPSTASH_REDIS_URL
+        sync: false
+      # Cloudflare R2 Storage
+      - key: CLOUDFLARE_R2_ENDPOINT
+        sync: false
+      - key: CLOUDFLARE_R2_ACCESS_KEY
+        sync: false
+      - key: CLOUDFLARE_R2_SECRET_KEY
+        sync: false
+      - key: CLOUDFLARE_R2_BUCKET
+        value: videoanalyser
+      # AI Providers
+      - key: GROQ_API_KEY
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
