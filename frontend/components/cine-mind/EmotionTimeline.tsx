@@ -81,7 +81,7 @@ export default function EmotionTimeline({ segments = [], emotionData = [], curre
         engagement: combinedText ? scoreText(combinedText, ENGAGE_WORDS) : 50,
       }
     })
-  }, [segments])
+  }, [segments, emotionData])
 
   // Find the closest data point to currentTime for the reference line
   const currentTimeSec = currentTime
