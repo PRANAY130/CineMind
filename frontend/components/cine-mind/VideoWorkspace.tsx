@@ -30,6 +30,8 @@ interface VideoWorkspaceProps {
     thumbnail: string
     duration: string
     r2_url?: string
+    status?: string
+    stream_url?: string
   }
   onBack: () => void
 }
@@ -59,6 +61,10 @@ export default function VideoWorkspace({ video, onBack }: VideoWorkspaceProps) {
   const [isEmotionsLoading, setIsEmotionsLoading] = useState(true)
   // True once the WS reports 100% — hides the overlay regardless of video.status prop
   const [isAnalysisComplete, setIsAnalysisComplete] = useState(video.status === 'ready')
+
+  // Resizable sidebar state
+  const [sidebarWidth, setSidebarWidth] = useState(300)
+  const isDragging = useRef(false)
 
   // Fetch real chapters and transcript
   const loadDetails = useCallback(async () => {
@@ -206,10 +212,38 @@ export default function VideoWorkspace({ video, onBack }: VideoWorkspaceProps) {
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [isPlaying])
 
+  // Handle mouse events for resizable sidebar
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!isDragging.current) return
+      // Calculate new width (window width - mouse X - some padding)
+      const newWidth = window.innerWidth - e.clientX - 12 // 12px for right padding
+      // Constrain width between 250px and 600px
+      if (newWidth > 250 && newWidth < 600) {
+        setSidebarWidth(newWidth)
+      }
+    }
+    const handleMouseUp = () => {
+      isDragging.current = false
+      document.body.style.cursor = 'default'
+      document.body.style.userSelect = 'auto'
+    }
+
+    window.addEventListener('mousemove', handleMouseMove)
+    window.addEventListener('mouseup', handleMouseUp)
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove)
+      window.removeEventListener('mouseup', handleMouseUp)
+    }
+  }, [])
+
   return (
     <div className="flex flex-col h-full">
       {/* Workspace Grid */}
-      <div className="flex-1 grid grid-cols-[1fr_300px] overflow-hidden p-3 gap-3">
+      <div 
+        className="flex-1 grid overflow-hidden p-3 gap-1"
+        style={{ gridTemplateColumns: `1fr 10px ${sidebarWidth}px` }}
+      >
         {/* Left Column: Player, Timeline & Detailed Summary (Scrollable) */}
         <ScrollArea className="flex flex-col bg-black/20 rounded-xl border border-white/5 overflow-hidden">
           <div className="flex flex-col gap-3 p-3">
@@ -314,6 +348,18 @@ export default function VideoWorkspace({ video, onBack }: VideoWorkspaceProps) {
             </Card>
           </div>
         </ScrollArea>
+
+        {/* Draggable Divider */}
+        <div 
+          className="flex items-center justify-center cursor-col-resize group px-1"
+          onMouseDown={() => {
+            isDragging.current = true
+            document.body.style.cursor = 'col-resize'
+            document.body.style.userSelect = 'none'
+          }}
+        >
+          <div className="w-1 h-12 bg-white/10 rounded-full group-hover:bg-purple-500/50 transition-colors" />
+        </div>
 
         {/* Right Column: AI Engine */}
         <Card className="glass-panel border-white/5 flex flex-col overflow-hidden">

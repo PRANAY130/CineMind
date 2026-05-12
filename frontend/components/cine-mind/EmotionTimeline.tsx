@@ -135,7 +135,7 @@ export default function EmotionTimeline({ segments = [], emotionData = [], curre
               fontSize: '11px'
             }}
             itemStyle={{ fontSize: '11px' }}
-            formatter={(val: number, name: string) => [`${val}`, name.charAt(0).toUpperCase() + name.slice(1)]}
+            formatter={(val: any, name: any) => [`${val}`, String(name).charAt(0).toUpperCase() + String(name).slice(1)]}
           />
           {/* Playhead indicator */}
           {closestPoint && (

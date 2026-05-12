@@ -71,3 +71,103 @@ Returning 10 buckets
 Doc exists: True
 Keys in doc: ['emotions', 'summary', 'transcript']
 Returning 10 buckets
+
+--- Request for 18 by d71U1Jrj6VotowEYvBpik4miP2a5nVPC ---
+Doc exists: True
+Keys in doc: ['emotions', 'summary', 'transcript']
+Returning 10 buckets
+
+--- Request for 18 by d71U1Jrj6VotowEYvBpik4miP2a5nVPC ---
+Doc exists: True
+Keys in doc: ['emotions', 'summary', 'transcript']
+Returning 10 buckets
+
+--- Request for 19 by d71U1Jrj6VotowEYvBpik4miP2a5nVPC ---
+Doc exists: True
+Keys in doc: ['emotions', 'summary', 'transcript']
+Returning 10 buckets
+
+--- Request for 19 by d71U1Jrj6VotowEYvBpik4miP2a5nVPC ---
+Doc exists: True
+Keys in doc: ['emotions', 'summary', 'transcript']
+Returning 10 buckets
+
+--- Request for 19 by d71U1Jrj6VotowEYvBpik4miP2a5nVPC ---
+Doc exists: True
+Keys in doc: ['emotions', 'summary', 'transcript']
+Returning 10 buckets
+
+--- Request for 19 by d71U1Jrj6VotowEYvBpik4miP2a5nVPC ---
+Doc exists: True
+Keys in doc: ['emotions', 'summary', 'transcript']
+Returning 10 buckets
+
+--- Request for 19 by d71U1Jrj6VotowEYvBpik4miP2a5nVPC ---
+Doc exists: True
+Keys in doc: ['emotions', 'summary', 'transcript']
+Returning 10 buckets
+
+--- Request for 19 by d71U1Jrj6VotowEYvBpik4miP2a5nVPC ---
+Doc exists: True
+Keys in doc: ['emotions', 'summary', 'transcript']
+Returning 10 buckets
+
+--- Request for 19 by d71U1Jrj6VotowEYvBpik4miP2a5nVPC ---
+Doc exists: True
+Keys in doc: ['emotions', 'summary', 'transcript']
+Returning 10 buckets
+
+--- Request for 19 by d71U1Jrj6VotowEYvBpik4miP2a5nVPC ---
+Doc exists: True
+Keys in doc: ['emotions', 'summary', 'transcript']
+Returning 10 buckets
+
+--- Request for 19 by d71U1Jrj6VotowEYvBpik4miP2a5nVPC ---
+Doc exists: True
+Keys in doc: ['emotions', 'summary', 'transcript']
+Returning 10 buckets
+
+--- Request for 19 by d71U1Jrj6VotowEYvBpik4miP2a5nVPC ---
+Doc exists: True
+Keys in doc: ['emotions', 'summary', 'transcript']
+Returning 10 buckets
+
+--- Request for 19 by d71U1Jrj6VotowEYvBpik4miP2a5nVPC ---
+Doc exists: True
+Keys in doc: ['emotions', 'summary', 'transcript']
+Returning 10 buckets
+
+--- Request for 19 by d71U1Jrj6VotowEYvBpik4miP2a5nVPC ---
+Doc exists: True
+Keys in doc: ['emotions', 'summary', 'transcript']
+Returning 10 buckets
+
+--- Request for 19 by d71U1Jrj6VotowEYvBpik4miP2a5nVPC ---
+Doc exists: True
+Keys in doc: ['emotions', 'summary', 'transcript']
+Returning 10 buckets
+
+--- Request for 19 by d71U1Jrj6VotowEYvBpik4miP2a5nVPC ---
+Doc exists: True
+Keys in doc: ['emotions', 'summary', 'transcript']
+Returning 10 buckets
+
+--- Request for 19 by d71U1Jrj6VotowEYvBpik4miP2a5nVPC ---
+Doc exists: True
+Keys in doc: ['emotions', 'summary', 'transcript']
+Returning 10 buckets
+
+--- Request for 19 by d71U1Jrj6VotowEYvBpik4miP2a5nVPC ---
+Doc exists: True
+Keys in doc: ['emotions', 'summary', 'transcript']
+Returning 10 buckets
+
+--- Request for 19 by d71U1Jrj6VotowEYvBpik4miP2a5nVPC ---
+Doc exists: True
+Keys in doc: ['emotions', 'summary', 'transcript']
+Returning 10 buckets
+
+--- Request for 19 by d71U1Jrj6VotowEYvBpik4miP2a5nVPC ---
+Doc exists: True
+Keys in doc: ['emotions', 'summary', 'transcript']
+Returning 10 buckets

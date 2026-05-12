@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { fetchSummary } from '@/lib/api'
-import { Loader2, Globe, CheckCircle2 } from 'lucide-react'
+import { Loader2, Globe, Brain, Target, Search, Lightbulb, Sparkles } from 'lucide-react'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { cn } from '@/lib/utils'
 
@@ -19,6 +19,77 @@ const LANGUAGES = [
   { id: 'Hindi', label: 'हिंदी', flag: '🇮🇳' },
   { id: 'German', label: 'Deutsch', flag: '🇩🇪' },
 ]
+
+interface SummarySection {
+  title: string
+  icon: any
+  color: string
+  content: string
+}
+
+const SECTION_CONFIG: Record<string, { icon: any, color: string, bg: string, border: string, text: string }> = {
+  'Executive Overview': { 
+    icon: Brain, 
+    color: '#EC4899', 
+    bg: 'bg-pink-500/10', 
+    border: 'border-pink-500/20',
+    text: 'text-pink-400'
+  },
+  'Key Takeaways': { 
+    icon: Target, 
+    color: '#F43F5E', 
+    bg: 'bg-rose-500/10', 
+    border: 'border-rose-500/20',
+    text: 'text-rose-400'
+  },
+  'Detailed Analysis': { 
+    icon: Search, 
+    color: '#3B82F6', 
+    bg: 'bg-blue-500/10', 
+    border: 'border-blue-500/20',
+    text: 'text-blue-400'
+  },
+  'Additional Context': { 
+    icon: Lightbulb, 
+    color: '#F59E0B', 
+    bg: 'bg-amber-500/10', 
+    border: 'border-amber-500/20',
+    text: 'text-amber-400'
+  }
+}
+
+function parseSummarySections(markdown: string): SummarySection[] {
+  if (!markdown) return []
+  
+  const sections: SummarySection[] = []
+  // Split by ### followed by emoji and title
+  const parts = markdown.split(/###\s*(?:[^\w\s]*)\s*\*\*(.*?)\*\*/g)
+  
+  // The first part is usually empty or intro text before first header
+  if (parts[0].trim()) {
+    sections.push({
+      title: 'Introduction',
+      icon: Sparkles,
+      color: '#A855F7',
+      content: parts[0].trim()
+    })
+  }
+
+  for (let i = 1; i < parts.length; i += 2) {
+    const title = parts[i].trim()
+    const content = parts[i+1]?.trim() || ''
+    const config = SECTION_CONFIG[title] || { icon: Sparkles, color: '#A855F7' }
+    
+    sections.push({
+      title,
+      icon: config.icon,
+      color: config.color,
+      content
+    })
+  }
+  
+  return sections
+}
 
 export default function GlobalSummaryTab({ videoId }: GlobalSummaryTabProps) {
   const [summaryData, setSummaryData] = useState<Record<string, string> | null>(null)
@@ -111,24 +182,63 @@ export default function GlobalSummaryTab({ videoId }: GlobalSummaryTabProps) {
       <ScrollArea className="flex-1 relative overflow-hidden">
         <div className="absolute top-0 right-0 w-[400px] h-[400px] bg-purple-600/[0.03] blur-[120px] pointer-events-none rounded-full" />
         
-        <div className="p-8 max-w-4xl mx-auto">
-          {LANGUAGES.map((lang) => (
-            <div 
-              key={lang.id}
-              className={cn(
-                "transition-all duration-700 ease-out",
-                activeLang === lang.id 
-                  ? "opacity-100 translate-y-0 relative pointer-events-auto" 
-                  : "opacity-0 translate-y-4 absolute inset-x-8 pointer-events-none"
-              )}
-            >
-              <div className="prose prose-invert prose-headings:text-purple-400 prose-headings:tracking-tighter prose-p:text-slate-300 prose-p:leading-relaxed prose-strong:text-white prose-li:text-slate-300 max-w-none prose-sm md:prose-base">
-                <ReactMarkdown>
-                  {summaryData[lang.id] || '_Translation unavailable._'}
-                </ReactMarkdown>
+        <div className="p-8 max-w-4xl mx-auto space-y-8">
+          {LANGUAGES.map((lang) => {
+            const sections = parseSummarySections(summaryData[lang.id] || '')
+            return (
+              <div 
+                key={lang.id}
+                className={cn(
+                  "transition-all duration-700 ease-out space-y-6",
+                  activeLang === lang.id 
+                    ? "opacity-100 translate-y-0 relative pointer-events-auto" 
+                    : "opacity-0 translate-y-4 absolute inset-x-8 pointer-events-none"
+                )}
+              >
+                {sections.length > 0 ? sections.map((section, idx) => {
+                  const config = SECTION_CONFIG[section.title] || { 
+                    icon: Sparkles, 
+                    bg: 'bg-purple-500/10', 
+                    border: 'border-purple-500/20',
+                    text: 'text-purple-400' 
+                  }
+                  const Icon = config.icon
+
+                  return (
+                    <div 
+                      key={idx}
+                      className={cn(
+                        "rounded-2xl border p-6 transition-all hover:shadow-lg group",
+                        config.bg,
+                        config.border
+                      )}
+                    >
+                      <div className="flex items-center gap-3 mb-4">
+                        <div className={cn("p-2 rounded-xl bg-white/5 border border-white/10 group-hover:scale-110 transition-transform", config.text)}>
+                          <Icon className="w-5 h-5" />
+                        </div>
+                        <h3 className={cn("text-sm font-black uppercase tracking-widest", config.text)}>
+                          {section.title}
+                        </h3>
+                      </div>
+                      
+                      <div className="prose prose-invert prose-sm max-w-none prose-p:text-slate-300 prose-p:leading-relaxed prose-li:text-slate-400 prose-strong:text-white">
+                        <ReactMarkdown>
+                          {section.content}
+                        </ReactMarkdown>
+                      </div>
+                    </div>
+                  )
+                }) : (
+                  <div className="prose prose-invert prose-sm max-w-none">
+                    <ReactMarkdown>
+                      {summaryData[lang.id] || '_Translation unavailable._'}
+                    </ReactMarkdown>
+                  </div>
+                )}
               </div>
-            </div>
-          ))}
+            )
+          })}
         </div>
       </ScrollArea>
     </div>
