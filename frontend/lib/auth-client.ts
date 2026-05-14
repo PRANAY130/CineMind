@@ -1,9 +1,9 @@
 import { createAuthClient } from 'better-auth/react'
 
-// NEXT_PUBLIC_BACKEND_URL is the FastAPI backend.
-// The Better Auth client points to the NEXT.JS server (same origin).
+// The Better Auth client must point to the Next.js server (same origin as the app).
+// NEXT_PUBLIC_APP_URL must be set in Vercel to https://cine-mind-inky.vercel.app
 export const authClient = createAuthClient({
   baseURL:
-    process.env.NEXT_PUBLIC_BETTER_AUTH_URL ||  // set if deploying
-    'http://localhost:3000',
+    process.env.NEXT_PUBLIC_APP_URL ||
+    (typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000'),
 })
