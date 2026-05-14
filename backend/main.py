@@ -25,7 +25,11 @@ app = FastAPI(title="CineMind API", version="1.0.0", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[
+        "https://cine-mind-inky.vercel.app",  # Production frontend
+        "http://localhost:3000",               # Local development
+        "http://127.0.0.1:3000",
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
