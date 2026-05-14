@@ -1,14 +1,15 @@
 services:
-  # ── FastAPI Web Server ─────────────────────────────────────────────────────
+  # ── CineMind Backend (FastAPI + Celery Worker combined) ────────────────────
+  # Both processes run inside one container to stay within the free tier.
+  # start.sh launches Celery in the background, then FastAPI in the foreground.
   - type: web
     name: cinemind-api
     env: docker
     plan: free
     autoDeploy: true
-    # Point to the backend subfolder as the Docker build context
     rootDir: backend
     dockerfilePath: ./Dockerfile
-    dockerCommand: "uvicorn main:app --host 0.0.0.0 --port $PORT"
+    # CMD in Dockerfile handles startup (start.sh) — no override needed
     envVars:
       - key: PORT
         value: 8000
@@ -42,41 +43,4 @@ services:
       - key: GEMINI_API_KEY
         sync: false
       - key: HUGGINGFACE_API_KEY
-        sync: false
-
-  # ── Celery Worker ──────────────────────────────────────────────────────────
-  - type: worker
-    name: cinemind-worker
-    env: docker
-    plan: free
-    autoDeploy: true
-    rootDir: backend
-    dockerfilePath: ./Dockerfile
-    # No --pool=solo on Linux — default prefork pool works correctly
-    dockerCommand: "celery -A workers.celery_app worker --loglevel=info --concurrency=1"
-    envVars:
-      # Firestore
-      - key: FIREBASE_CERT_JSON
-        sync: false
-      - key: FIREBASE_PROJECT_ID
-        sync: false
-      # NeonDB
-      - key: NEON_DB_URL
-        sync: false
-      # Upstash Redis (Celery broker)
-      - key: UPSTASH_REDIS_URL
-        sync: false
-      # Cloudflare R2 Storage
-      - key: CLOUDFLARE_R2_ENDPOINT
-        sync: false
-      - key: CLOUDFLARE_R2_ACCESS_KEY
-        sync: false
-      - key: CLOUDFLARE_R2_SECRET_KEY
-        sync: false
-      - key: CLOUDFLARE_R2_BUCKET
-        value: videoanalyser
-      # AI Providers
-      - key: GROQ_API_KEY
-        sync: false
-      - key: GEMINI_API_KEY
         sync: false
