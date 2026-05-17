@@ -111,12 +111,29 @@ async def upload_youtube(
     print(f"[Upload] YouTube url='{request.url}'  user={user_id}")
     
     # ── Download with yt-dlp ───────────────────────────────────────────────
-    # Use worst or best[height<=480] to keep size small as requested
+    # YouTube blocks datacenter IPs. Using the Android/iOS client bypasses
+    # bot detection since those clients are authenticated differently.
     ydl_opts = {
-        'format': 'bestvideo[height<=480][ext=mp4]+bestaudio[ext=m4a]/best[height<=480][ext=mp4]/worst',
+        'format': 'bestvideo[height<=480][ext=mp4]+bestaudio[ext=m4a]/best[height<=480][ext=mp4]/best[height<=480]/worst',
         'outtmpl': os.path.join(tempfile.gettempdir(), '%(id)s.%(ext)s'),
         'quiet': True,
         'no_warnings': True,
+        # Bypass bot detection: use Android YouTube client
+        'extractor_args': {
+            'youtube': {
+                'player_client': ['android', 'web'],
+            }
+        },
+        # Extra headers to look like a real browser
+        'http_headers': {
+            'User-Agent': (
+                'Mozilla/5.0 (Linux; Android 12; Pixel 6) '
+                'AppleWebKit/537.36 (KHTML, like Gecko) '
+                'Chrome/112.0.0.0 Mobile Safari/537.36'
+            ),
+        },
+        'retries': 3,
+        'fragment_retries': 3,
     }
     
     try:
