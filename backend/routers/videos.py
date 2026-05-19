@@ -114,7 +114,7 @@ async def upload_youtube(
     # YouTube blocks datacenter IPs. Using the Android/iOS client bypasses
     # bot detection since those clients are authenticated differently.
     ydl_opts = {
-        'format': 'bestvideo[height<=480][ext=mp4]+bestaudio[ext=m4a]/best[height<=480][ext=mp4]/best[height<=480]/worst',
+        'format': 'bestvideo[height<=480][ext=mp4]+bestaudio[ext=m4a]/best[height<=480]/best/worst',
         'outtmpl': os.path.join(tempfile.gettempdir(), '%(id)s.%(ext)s'),
         'quiet': True,
         'no_warnings': True,
