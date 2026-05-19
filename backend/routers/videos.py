@@ -136,6 +136,23 @@ async def upload_youtube(
         'fragment_retries': 3,
     }
     
+    # Support cookies file to bypass YouTube's datacenter bot detection
+    cookies_file = os.getenv("YOUTUBE_COOKIES_FILE", "youtube_cookies.txt")
+    cookies_content = os.getenv("YOUTUBE_COOKIES_CONTENT")
+    
+    if cookies_content:
+        cookies_file = os.path.join(tempfile.gettempdir(), "youtube_cookies.txt")
+        with open(cookies_file, "w") as f:
+            # Render env vars sometimes escape newlines, so we ensure they are correctly parsed
+            f.write(cookies_content.replace('\\n', '\n'))
+        ydl_opts['cookiefile'] = cookies_file
+        print("[Upload] Using YouTube cookies from YOUTUBE_COOKIES_CONTENT environment variable")
+    elif os.path.exists(cookies_file):
+        ydl_opts['cookiefile'] = cookies_file
+        print(f"[Upload] Using YouTube cookies from {cookies_file}")
+    else:
+        print(f"[Upload] WARNING: No cookies file or YOUTUBE_COOKIES_CONTENT found. YouTube may block the request.")
+    
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = await asyncio.to_thread(ydl.extract_info, request.url, download=True)
