@@ -115,21 +115,24 @@ async def upload_youtube(
     # client emulations (like ios, mweb, android_vr) which bypass bot detection more
     # reliably, and merge different audio/video streams to mp4 automatically.
     ydl_opts = {
-        'format': 'bestvideo[height<=480]+bestaudio/best[height<=480]/best',
+        'format': '(bv*+ba/b)[height<=480]/(bestvideo+bestaudio/best)',
         'merge_output_format': 'mp4',
-        'outtmpl': os.path.join(tempfile.gettempdir(), '%(id)s.%(ext)s'),
+        'outtmpl': os.path.join(
+            tempfile.gettempdir(),
+            '%(id)s.%(ext)s'
+        ),
         'quiet': True,
         'no_warnings': True,
-        # Extra headers to look like a real browser
         'http_headers': {
             'User-Agent': (
-                'Mozilla/5.0 (Linux; Android 12; Pixel 6) '
+                'Mozilla/5.0 (Windows NT 10.0; Win64; x64) '
                 'AppleWebKit/537.36 (KHTML, like Gecko) '
-                'Chrome/112.0.0.0 Mobile Safari/537.36'
+                'Chrome/124.0.0.0 Safari/537.36'
             ),
         },
-        'retries': 3,
-        'fragment_retries': 3,
+        'retries': 5,
+        'fragment_retries': 5,
+        'noplaylist': True,
     }
     
     # Support cookies file to bypass YouTube's datacenter bot detection
