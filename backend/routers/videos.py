@@ -111,19 +111,15 @@ async def upload_youtube(
     print(f"[Upload] YouTube url='{request.url}'  user={user_id}")
     
     # ── Download with yt-dlp ───────────────────────────────────────────────
-    # YouTube blocks datacenter IPs. Using the Android/iOS client bypasses
-    # bot detection since those clients are authenticated differently.
+    # YouTube blocks datacenter IPs. We let yt-dlp use its default optimized set of
+    # client emulations (like ios, mweb, android_vr) which bypass bot detection more
+    # reliably, and merge different audio/video streams to mp4 automatically.
     ydl_opts = {
-        'format': 'bestvideo[height<=480][ext=mp4]+bestaudio[ext=m4a]/best[height<=480]/best/worst',
+        'format': 'bestvideo[height<=480]+bestaudio/best[height<=480]/best',
+        'merge_output_format': 'mp4',
         'outtmpl': os.path.join(tempfile.gettempdir(), '%(id)s.%(ext)s'),
         'quiet': True,
         'no_warnings': True,
-        # Bypass bot detection: use Android YouTube client
-        'extractor_args': {
-            'youtube': {
-                'player_client': ['android', 'web'],
-            }
-        },
         # Extra headers to look like a real browser
         'http_headers': {
             'User-Agent': (
