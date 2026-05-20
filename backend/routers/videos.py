@@ -115,7 +115,7 @@ async def upload_youtube(
     # client emulations (like ios, mweb, android_vr) which bypass bot detection more
     # reliably, and merge different audio/video streams to mp4 automatically.
     ydl_opts = {
-        'format': '(bv*+ba/b)[height<=480]/(bestvideo+bestaudio/best)',
+        'format': 'bestvideo[height<=480]+bestaudio/best[height<=480]/best',
         'merge_output_format': 'mp4',
         'outtmpl': os.path.join(
             tempfile.gettempdir(),
