@@ -321,8 +321,50 @@ def run_video_pipeline(self, video_id: int, r2_url: str, user_id: str = "anonymo
                     print(f"[Pipeline]   ChromaDB/embedding error (non-fatal): {e}")
                     traceback.print_exc()
 
+            #  STEP 4b  Generate global summary with Gemini 
+            update_progress("Generating global summary...", 65)
+            if transcript_text and "Transcription failed" not in transcript_text:
+                try:
+                    print(f"[Pipeline] Generating global summary via Gemini...")
+                    import google.generativeai as genai
+                    genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
+                    model = genai.GenerativeModel("gemini-3-flash-preview")
+                    prompt = (
+                        "You are an elite video content analyst. Analyze the following video transcript "
+                        "and generate a comprehensive, high-density global summary.\n\n"
+                        "STRUCTURE YOUR SUMMARY WITH THE FOLLOWING SECTIONS (using Markdown headers and bullets):\n"
+                        "1. 🧠 **Executive Overview**: A 2-3 sentence high-level synthesis.\n"
+                        "2. 📍 **Key Takeaways**: Bullet points of the most critical facts or events.\n"
+                        "3. 🔍 **Detailed Analysis**: A deep dive into the underlying themes or arguments.\n"
+                        "4. 💡 **Additional Context**: Any relevant background info or implications.\n\n"
+                        "IMPORTANT: Return the output STRICTLY as a JSON object with the following keys: "
+                        "\"English\", \"Spanish\", \"French\", \"Hindi\", and \"German\".\n"
+                        "The values MUST be the detailed Markdown-formatted summary string in that specific language.\n\n"
+                        f"Transcript:\n{transcript_text[:15000]}"
+                    )
+                    response = model.generate_content(prompt)
+                    raw = response.text.strip()
+                    match = re.search(r"\{.*\}", raw, re.DOTALL)
+                    if match:
+                        raw = match.group(0)
+                    summary_data = json.loads(raw)
+                    
+                    # Save to Firestore
+                    from db.firestore import get_firestore_client
+                    fs_db_s = get_firestore_client()
+                    if fs_db_s:
+                        fs_db_s.collection("user").document(user_id).collection("videos").document(str(video_id)).set({
+                            "summary": {
+                                "data": summary_data
+                            }
+                        }, merge=True)
+                        print(f"[Pipeline] Firestore: global summary saved")
+                except Exception as e:
+                    print(f"[Pipeline] Summary generation error (non-fatal): {e}")
+                    traceback.print_exc()
+
             #  STEP 5  Generate chapters with Groq LLaMA 3 
-            update_progress("Generating chapters with LLaMA 3...", 72)
+            update_progress("Generating chapters with LLaMA 3...", 75)
             chapters = []
             if transcript_text and "Transcription failed" not in transcript_text:
                 try:

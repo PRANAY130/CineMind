@@ -344,7 +344,7 @@ export default function VideoWorkspace({ video, onBack }: VideoWorkspaceProps) {
 
             {/* Detailed Global Summary */}
             <Card className="glass-panel border-white/5 overflow-hidden flex flex-col shrink-0 min-h-[500px]">
-              <GlobalSummaryTab videoId={video.id} />
+              <GlobalSummaryTab videoId={video.id} isAnalysisComplete={isAnalysisComplete} />
             </Card>
           </div>
         </ScrollArea>

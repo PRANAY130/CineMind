@@ -10,6 +10,7 @@ import ReactMarkdown from 'react-markdown'
 
 interface GlobalSummaryTabProps {
   videoId: string
+  isAnalysisComplete?: boolean
 }
 
 const LANGUAGES = [
@@ -91,13 +92,15 @@ function parseSummarySections(markdown: string): SummarySection[] {
   return sections
 }
 
-export default function GlobalSummaryTab({ videoId }: GlobalSummaryTabProps) {
+export default function GlobalSummaryTab({ videoId, isAnalysisComplete = true }: GlobalSummaryTabProps) {
   const [summaryData, setSummaryData] = useState<Record<string, string> | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [activeLang, setActiveLang] = useState<string>('English')
 
   useEffect(() => {
+    if (!isAnalysisComplete) return
+
     let isMounted = true
     const loadSummary = async () => {
       try {
@@ -121,7 +124,22 @@ export default function GlobalSummaryTab({ videoId }: GlobalSummaryTabProps) {
 
     loadSummary()
     return () => { isMounted = false }
-  }, [videoId])
+  }, [videoId, isAnalysisComplete])
+
+  if (!isAnalysisComplete) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[300px] p-12 text-center">
+        <div className="relative mb-6">
+          <div className="absolute inset-0 rounded-full blur-2xl bg-purple-500/10 animate-pulse" />
+          <Globe className="w-12 h-12 text-purple-400 animate-spin-slow relative z-10" />
+        </div>
+        <h3 className="text-base font-black text-white uppercase tracking-[0.2em] mb-3">Awaiting Synthesis</h3>
+        <p className="text-xs text-slate-400 max-w-[350px] leading-relaxed">
+          The global summary will be synthesized automatically in multiple languages as soon as the video analysis finishes.
+        </p>
+      </div>
+    )
+  }
 
   if (isLoading) {
     return (
