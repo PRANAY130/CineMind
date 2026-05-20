@@ -4,8 +4,10 @@ WORKDIR /app
 
 # Install system dependencies
 # ffmpeg: required for audio chunking in the pipeline
+# nodejs: required as a JS runtime for yt-dlp to decrypt YouTube signatures
 RUN apt-get update && apt-get install -y \
     ffmpeg \
+    nodejs \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy and install Python dependencies
