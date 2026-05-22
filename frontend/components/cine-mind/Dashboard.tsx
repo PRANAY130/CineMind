@@ -2,13 +2,8 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { motion } from 'motion/react'
-import { Button } from '@/components/ui/button'
-import { Card } from '@/components/ui/card'
-import { Badge } from '@/components/ui/badge'
-import { Upload, Video, Clock, CheckCircle2, Loader2, Plus, Search, Play, Trash2 } from 'lucide-react'
-import { Input } from '@/components/ui/input'
-import Image from 'next/image'
-import { fetchVideos, uploadVideo, deleteVideo } from '@/lib/api'
+import { Upload, Clock, CheckCircle2, Loader2, Search, Play, Trash2, Video, Film } from 'lucide-react'
+import { fetchVideos, deleteVideo } from '@/lib/api'
 import ConfirmModal from './ConfirmModal'
 
 interface VideoItem {
@@ -30,12 +25,8 @@ export default function Dashboard({ onSelectVideo }: DashboardProps) {
   const [videos, setVideos] = useState<VideoItem[]>([])
   const [isLoadingVideos, setIsLoadingVideos] = useState(true)
   const [searchQuery, setSearchQuery] = useState('')
-  
-  // Modal State
   const [deleteId, setDeleteId] = useState<string | null>(null)
   const [isDeleting, setIsDeleting] = useState(false)
-
-  // Use a ref so the cleanup function always captures the current interval id
   const intervalRef = useRef<NodeJS.Timeout | null>(null)
 
   const mapVideos = (data: any[]): VideoItem[] =>
@@ -48,33 +39,26 @@ export default function Dashboard({ onSelectVideo }: DashboardProps) {
         ? `${Math.floor(v.duration_sec / 60)}:${String(v.duration_sec % 60).padStart(2, '0')}`
         : '--:--',
       status: v.status === 'ready' ? 'ready' : 'processing',
-      date: v.created_at ? new Date(v.created_at).toLocaleDateString() : 'Unknown',
+      date: v.created_at ? new Date(v.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '—',
       r2_url: v.r2_url,
     }))
 
   const loadVideos = useCallback(async () => {
     try {
-      console.log('[Dashboard] Fetching videos...')
       const data = await fetchVideos()
       const mapped = mapVideos(data)
-      console.log(`[Dashboard] Loaded ${mapped.length} videos`)
       setVideos(mapped)
-
-      // Auto-poll while any video is still processing
       if (mapped.some(v => v.status === 'processing')) {
         if (!intervalRef.current) {
-          console.log('[Dashboard] Starting 5s poll for processing videos')
           intervalRef.current = setInterval(loadVideos, 5000)
         }
       } else {
         if (intervalRef.current) {
-          console.log('[Dashboard] All videos ready — stopping poll')
           clearInterval(intervalRef.current)
           intervalRef.current = null
         }
       }
-    } catch (err) {
-      console.error('[Dashboard] Failed to load videos:', err)
+    } catch {
       setVideos([])
     } finally {
       setIsLoadingVideos(false)
@@ -83,26 +67,18 @@ export default function Dashboard({ onSelectVideo }: DashboardProps) {
 
   useEffect(() => {
     loadVideos()
-    return () => {
-      if (intervalRef.current) clearInterval(intervalRef.current)
-    }
+    return () => { if (intervalRef.current) clearInterval(intervalRef.current) }
   }, [loadVideos])
-
-  const handleDelete = (e: React.MouseEvent, videoId: string) => {
-    e.stopPropagation()
-    setDeleteId(videoId)
-  }
 
   const confirmDelete = async () => {
     if (!deleteId) return
     try {
       setIsDeleting(true)
-      console.log(`[Dashboard] Deleting video ${deleteId}`)
       await deleteVideo(Number(deleteId))
       await loadVideos()
       setDeleteId(null)
-    } catch (err) {
-      console.error('[Dashboard] Failed to delete video:', err)
+    } catch {
+      /* ignore */
     } finally {
       setIsDeleting(false)
     }
@@ -112,22 +88,26 @@ export default function Dashboard({ onSelectVideo }: DashboardProps) {
     v.title.toLowerCase().includes(searchQuery.toLowerCase())
   )
 
+  const readyCount      = videos.filter(v => v.status === 'ready').length
+  const processingCount = videos.filter(v => v.status === 'processing').length
 
   return (
-    <div className="p-6 relative">
-      <div className="max-w-7xl mx-auto relative z-10">
-        {/* Header */}
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-10">
+    <div className="p-6">
+      <div className="max-w-7xl mx-auto">
+
+        {/* Header row */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
           <div>
-            <h1 className="text-3xl font-black tracking-tighter mb-1 accent-text">My Workspace</h1>
-            <p className="high-density-text">Intelligent video library & analysis engine</p>
+            <h1 className="text-2xl font-bold text-white tracking-tight">Video Library</h1>
+            <p className="text-sm text-zinc-500 mt-0.5">Your AI-analyzed video collection</p>
           </div>
-          <div className="flex items-center gap-3">
-            <div className="relative group">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-500 group-focus-within:text-purple-400 transition-colors" />
-              <Input 
-                placeholder="Search repository..." 
-                className="pl-9 w-60 h-9 bg-white/[0.03] border-white/10 focus:border-purple-500/50 transition-all text-xs rounded-lg"
+          <div className="flex items-center gap-2">
+            {/* Search */}
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-zinc-600" />
+              <input
+                placeholder="Search videos..."
+                className="holo-input pl-9 pr-4 h-9 w-52 text-sm"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
               />
@@ -135,92 +115,120 @@ export default function Dashboard({ onSelectVideo }: DashboardProps) {
           </div>
         </div>
 
-
+        {/* Stats row */}
+        <div className="grid grid-cols-3 gap-3 mb-8">
+          {[
+            { label: 'Total Videos',  value: videos.length,  color: 'stat-purple', badge: 'badge-purple' },
+            { label: 'Ready',         value: readyCount,     color: 'stat-green',  badge: 'badge-green'  },
+            { label: 'Processing',    value: processingCount,color: 'stat-amber',  badge: 'badge-amber'  },
+          ].map((s, i) => (
+            <div key={i} className="holo-card p-4 flex items-center justify-between">
+              <div>
+                <span className={`text-2xl font-black font-mono ${s.color}`}>{s.value}</span>
+                <p className="section-label mt-0.5">{s.label}</p>
+              </div>
+              <span className={s.badge}>{s.label}</span>
+            </div>
+          ))}
+        </div>
 
         {/* Video Grid */}
         {isLoadingVideos ? (
-          <div className="flex items-center justify-center h-32">
-            <Loader2 className="w-6 h-6 animate-spin text-purple-400" />
+          <div className="flex items-center justify-center h-48">
+            <Loader2 className="w-6 h-6 animate-spin text-violet-400" />
           </div>
         ) : filteredVideos.length === 0 ? (
-          <div className="text-center py-16">
-            <p className="text-slate-500 text-sm font-bold uppercase tracking-widest">No videos found. Upload your first video!</p>
+          <div className="holo-card flex flex-col items-center justify-center py-20 text-center">
+            <div className="w-14 h-14 rounded-2xl bg-violet-500/10 border border-violet-500/20 flex items-center justify-center mb-4">
+              <Film className="w-7 h-7 text-violet-400" />
+            </div>
+            <h3 className="text-base font-semibold text-white mb-1">No videos yet</h3>
+            <p className="text-sm text-zinc-500 mb-6 max-w-xs">
+              Upload your first video to start analyzing it with AI.
+            </p>
+            <button
+              onClick={() => window.location.href = '/upload'}
+              className="btn-primary rounded-xl text-sm h-10 px-5"
+            >
+              <Upload className="w-4 h-4" />
+              Upload Video
+            </button>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {filteredVideos.map((video) => (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+            {filteredVideos.map((video, idx) => (
               <motion.div
                 key={video.id}
-                whileHover={{ y: -5 }}
+                initial={{ opacity: 0, y: 12 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: idx * 0.04 }}
+                whileHover={{ y: -3 }}
                 onClick={() => onSelectVideo(video)}
-                className="group cursor-pointer"
+                className="holo-card group cursor-pointer overflow-hidden hover:border-violet-500/30 transition-colors"
               >
-                <Card className="overflow-hidden glass-panel border-white/5 group-hover:border-purple-500/40 transition-all ring-1 ring-white/5 group-hover:ring-white/10 h-full flex flex-col">
-                  <div className="relative w-full h-0 pb-[56.25%] overflow-hidden bg-black/20">
-                    <video 
-                      src={`${video.stream_url || video.thumbnail}#t=1.0`} 
-                      className="absolute inset-0 w-full h-full object-cover transition-transform duration-700 blur-[0.5px] group-hover:blur-0 group-hover:scale-105"
-                      preload="metadata"
-                      muted
-                      playsInline
-                    />
-                    <div className="absolute top-2 right-2 z-10 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <Button
-                        variant="destructive"
-                        size="icon"
-                        className="h-7 w-7 rounded-full bg-red-500/80 hover:bg-red-600 backdrop-blur-md"
-                        onClick={(e) => handleDelete(e, video.id)}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
-                    <div className="absolute inset-0 bg-[#0F172A]/40 opacity-40 group-hover:opacity-0 transition-opacity" />
-                    <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all scale-90 group-hover:scale-100">
-                      <div className="w-10 h-10 rounded-full accent-gradient flex items-center justify-center shadow-2xl">
-                        <Play className="w-5 h-5 text-white fill-current ml-0.5" />
-                      </div>
-                    </div>
-                    <div className="absolute bottom-2 right-2 px-1.5 py-0.5 rounded bg-black/80 backdrop-blur-md text-[9px] font-mono tracking-tighter text-white/90 border border-white/10">
-                      {video.duration}
+                {/* Thumbnail */}
+                <div className="relative w-full aspect-video bg-[#0D0D10] overflow-hidden">
+                  <video
+                    src={`${video.stream_url || video.thumbnail}#t=1.0`}
+                    className="absolute inset-0 w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                    preload="metadata"
+                    muted
+                    playsInline
+                  />
+                  {/* Overlay */}
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
+
+                  {/* Play button */}
+                  <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-violet-600 to-cyan-500 flex items-center justify-center shadow-[0_0_20px_rgba(124,58,237,0.5)]">
+                      <Play className="w-4 h-4 text-white fill-current ml-0.5" />
                     </div>
                   </div>
-                  <div className="p-4 bg-white/[0.01]">
-                    <div className="flex items-start justify-between gap-3 mb-3 h-[42px]">
-                      <h3 className="font-bold text-sm tracking-tight leading-snug group-hover:text-purple-400 transition-colors line-clamp-2 overflow-hidden">
-                        {video.title}
-                      </h3>
-                      {video.status === 'ready' ? (
-                        <Badge className="bg-emerald-500/10 text-emerald-500 border-emerald-500/20 text-[9px] px-1.5 py-0 font-bold uppercase tracking-wider shrink-0 mt-0.5">
-                          Active
-                        </Badge>
-                      ) : (
-                        <Badge className="bg-amber-500/10 text-amber-500 border-amber-500/20 text-[9px] px-1.5 py-0 font-bold uppercase tracking-wider shrink-0 mt-0.5">
-                          Processing
-                        </Badge>
-                      )}
+
+                  {/* Delete btn */}
+                  <button
+                    onClick={(e) => { e.stopPropagation(); setDeleteId(video.id) }}
+                    className="absolute top-2 right-2 w-7 h-7 rounded-lg bg-black/60 border border-white/10 flex items-center justify-center opacity-0 group-hover:opacity-100 hover:bg-red-500/80 hover:border-red-500/50 transition-all"
+                  >
+                    <Trash2 className="w-3.5 h-3.5 text-white" />
+                  </button>
+
+                  {/* Duration */}
+                  <span className="absolute bottom-2 right-2 text-[10px] font-mono font-bold text-white/90 bg-black/70 px-1.5 py-0.5 rounded-md">
+                    {video.duration}
+                  </span>
+                </div>
+
+                {/* Info */}
+                <div className="p-3">
+                  <h3 className="text-sm font-semibold text-white line-clamp-1 mb-2 group-hover:text-violet-300 transition-colors">
+                    {video.title}
+                  </h3>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-1 text-zinc-600">
+                      <Clock className="w-3 h-3" />
+                      <span className="text-[10px] font-medium">{video.date}</span>
                     </div>
-                    <div className="flex items-center gap-3 text-[10px] font-bold text-slate-500 uppercase tracking-widest">
-                      <div className="flex items-center gap-1">
-                        <Clock className="w-3 h-3 text-slate-600" />
-                        {video.date}
-                      </div>
-                      <div className="flex items-center gap-1">
-                        <Video className="w-3 h-3 text-slate-600" />
-                        1080p
-                      </div>
-                    </div>
+                    {video.status === 'ready' ? (
+                      <span className="badge-green">Ready</span>
+                    ) : (
+                      <span className="badge-amber flex items-center gap-1">
+                        <Loader2 className="w-2.5 h-2.5 animate-spin" />
+                        Processing
+                      </span>
+                    )}
                   </div>
-                </Card>
+                </div>
               </motion.div>
             ))}
           </div>
         )}
       </div>
 
-      <ConfirmModal 
+      <ConfirmModal
         isOpen={!!deleteId}
-        title="Delete Video?"
-        description="This action will permanently remove the video, transcript, and AI analysis. This cannot be undone."
+        title="Delete this video?"
+        description="This will permanently remove the video, transcript, and all AI analysis. This cannot be undone."
         isLoading={isDeleting}
         onConfirm={confirmDelete}
         onCancel={() => setDeleteId(null)}

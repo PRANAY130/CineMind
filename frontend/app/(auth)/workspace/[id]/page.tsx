@@ -31,13 +31,15 @@ export default function WorkspaceRoute() {
 
   if (error) {
     return (
-      <div className="flex flex-col items-center justify-center h-full p-8 text-center">
-        <h2 className="text-2xl font-bold text-red-400 mb-4">{error}</h2>
-        <button 
+      <div className="flex flex-col items-center justify-center h-full p-8 text-center gap-4">
+        <p className="text-sm text-red-400 bg-red-400/10 px-5 py-3 rounded-xl border border-red-400/20">
+          {error}
+        </p>
+        <button
           onClick={() => router.push('/dashboard')}
-          className="px-6 py-2 rounded-xl accent-gradient text-white font-bold"
+          className="btn-primary h-10 px-6 rounded-xl text-sm"
         >
-          Back to Dashboard
+          Back to Library
         </button>
       </div>
     )
@@ -46,7 +48,7 @@ export default function WorkspaceRoute() {
   if (!video) {
     return (
       <div className="flex h-full items-center justify-center">
-        <Loader2 className="w-8 h-8 animate-spin text-purple-400" />
+        <Loader2 className="w-8 h-8 animate-spin text-violet-400" />
       </div>
     )
   }

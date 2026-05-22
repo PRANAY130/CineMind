@@ -2,99 +2,102 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { Button, buttonVariants } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
-import { Play, BookOpen, FileText, Settings, ChevronLeft, LayoutDashboard, UploadCloud } from 'lucide-react'
+import { UploadCloud, LayoutDashboard, BookOpen, FileText, Settings, ChevronLeft, Clapperboard } from 'lucide-react'
 
 export default function Sidebar() {
   const pathname = usePathname()
-  
-  // Back button logic: if we are in a workspace, show back to dashboard
   const isWorkspace = pathname.startsWith('/workspace')
 
+  const navItems = [
+    { href: '/upload',    icon: UploadCloud,    label: 'Upload'     },
+    { href: '/dashboard', icon: LayoutDashboard, label: 'Library'    },
+    { href: '/library',   icon: BookOpen,        label: 'Knowledge'  },
+    { href: '#',          icon: FileText,        label: 'Transcripts'},
+  ]
+
   return (
-    <aside className="w-16 glass-sidebar flex flex-col items-center py-6 gap-6 z-20 transition-all shrink-0 border-r border-white/5 bg-slate-900/50 backdrop-blur-xl">
-      {/* Top Logo / Back Action */}
-      {isWorkspace ? (
-        <Link 
-          href="/dashboard"
-          className="w-10 h-10 rounded-xl accent-gradient flex items-center justify-center cursor-pointer shadow-lg hover:scale-105 active:scale-95 transition-all duration-200" 
-          title="Back to Dashboard"
-        >
-          <ChevronLeft className="w-6 h-6 text-white" />
-        </Link>
-      ) : (
-        <Link 
-          href="/dashboard"
-          className="w-10 h-10 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center cursor-pointer hover:border-purple-500/50 hover:bg-white/10 transition-all duration-300"
-          title="CineMind Home"
-        >
-          <div className="w-5 h-5 rounded-md accent-gradient rotate-45 shadow-[0_0_15px_rgba(168,85,247,0.4)]" />
-        </Link>
-      )}
-      
-      {/* Navigation Icons */}
-      <div className="flex flex-col gap-5 mt-10">
-        <SidebarItem 
-          href="/upload"
-          icon={UploadCloud} 
-          label="Upload" 
-          active={pathname === '/upload'} 
-        />
-        <SidebarItem 
-          href="/dashboard"
-          icon={LayoutDashboard} 
-          label="Library" 
-          active={pathname === '/dashboard'} 
-        />
-        <SidebarItem 
-          href="/library"
-          icon={BookOpen} 
-          label="Knowledge" 
-          active={pathname === '/library'} 
-        />
-        <SidebarItem 
-          href="#"
-          icon={FileText} 
-          label="Transcripts" 
-          active={false} 
-        />
+    <aside className="holo-sidebar w-[68px] flex flex-col items-center py-5 gap-4 shrink-0 z-20">
+      {/* Logo / Back */}
+      <div className="mb-3">
+        {isWorkspace ? (
+          <Link
+            href="/dashboard"
+            title="Back to Library"
+            className="flex items-center justify-center w-10 h-10 rounded-xl bg-gradient-to-br from-violet-600 to-cyan-500 shadow-[0_0_16px_rgba(124,58,237,0.5)] hover:scale-105 transition-transform"
+          >
+            <ChevronLeft className="w-5 h-5 text-white" />
+          </Link>
+        ) : (
+          <Link
+            href="/dashboard"
+            title="CineMind"
+            className="flex items-center justify-center w-10 h-10 rounded-xl bg-gradient-to-br from-violet-600/20 to-cyan-500/20 border border-violet-500/20 hover:border-violet-500/40 hover:from-violet-600/30 hover:to-cyan-500/30 transition-all duration-300"
+          >
+            <Clapperboard className="w-5 h-5 text-violet-400" />
+          </Link>
+        )}
       </div>
 
-      {/* Bottom Settings Icon */}
-      <div className="mt-auto pb-4">
-        <SidebarItem 
-          href="/profile"
-          icon={Settings} 
-          label="Settings" 
-          active={pathname === '/profile'} 
-        />
+      {/* Nav Items */}
+      <nav className="flex flex-col items-center gap-1 w-full px-2">
+        {navItems.map(({ href, icon: Icon, label }) => {
+          const active = pathname === href
+          return (
+            <div key={label} className="relative group w-full">
+              <Link
+                href={href}
+                className={cn(
+                  'flex items-center justify-center w-full h-11 rounded-xl transition-all duration-200 relative',
+                  active
+                    ? 'bg-violet-500/10 text-violet-400'
+                    : 'text-zinc-500 hover:text-zinc-300 hover:bg-white/[0.04]'
+                )}
+              >
+                {/* Active left-bar indicator */}
+                {active && (
+                  <span className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-5 rounded-full bg-gradient-to-b from-violet-400 to-cyan-400" />
+                )}
+                <Icon className="w-[18px] h-[18px]" />
+              </Link>
+
+              {/* Hover Tooltip */}
+              <div className="pointer-events-none absolute left-[calc(100%+10px)] top-1/2 -translate-y-1/2 z-50 opacity-0 group-hover:opacity-100 transition-all duration-200 translate-x-1 group-hover:translate-x-0">
+                <div className="bg-[#18181F] border border-white/10 text-white text-[11px] font-semibold px-3 py-1.5 rounded-lg whitespace-nowrap shadow-xl">
+                  {label}
+                  <div className="absolute right-full top-1/2 -translate-y-1/2 border-4 border-transparent border-r-[#18181F]" />
+                </div>
+              </div>
+            </div>
+          )
+        })}
+      </nav>
+
+      {/* Settings at bottom */}
+      <div className="mt-auto px-2 w-full">
+        <div className="relative group w-full">
+          <Link
+            href="/profile"
+            className={cn(
+              'flex items-center justify-center w-full h-11 rounded-xl transition-all duration-200 relative',
+              pathname === '/profile'
+                ? 'bg-violet-500/10 text-violet-400'
+                : 'text-zinc-500 hover:text-zinc-300 hover:bg-white/[0.04]'
+            )}
+          >
+            {pathname === '/profile' && (
+              <span className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-5 rounded-full bg-gradient-to-b from-violet-400 to-cyan-400" />
+            )}
+            <Settings className="w-[18px] h-[18px]" />
+          </Link>
+          <div className="pointer-events-none absolute left-[calc(100%+10px)] top-1/2 -translate-y-1/2 z-50 opacity-0 group-hover:opacity-100 transition-all duration-200 translate-x-1 group-hover:translate-x-0">
+            <div className="bg-[#18181F] border border-white/10 text-white text-[11px] font-semibold px-3 py-1.5 rounded-lg whitespace-nowrap shadow-xl">
+              Settings
+              <div className="absolute right-full top-1/2 -translate-y-1/2 border-4 border-transparent border-r-[#18181F]" />
+            </div>
+          </div>
+        </div>
       </div>
     </aside>
-  )
-}
-
-function SidebarItem({ href, icon: Icon, label, active }: { href: string, icon: any, label: string, active: boolean }) {
-  return (
-    <div className="relative group">
-      <Link 
-        href={href}
-        className={cn(
-          buttonVariants({ variant: 'ghost', size: 'icon' }),
-          "w-12 h-12 rounded-xl transition-all duration-300",
-          active 
-            ? 'text-purple-400 bg-purple-500/10 border border-purple-500/20' 
-            : 'text-slate-500 hover:text-white hover:bg-white/5'
-        )}
-      >
-        <Icon className={`w-5 h-5 ${active ? 'animate-pulse-slow' : ''}`} />
-      </Link>
-      
-      {/* Tooltip */}
-      <div className="absolute left-16 top-1/2 -translate-y-1/2 px-3 py-1.5 rounded-lg bg-[#1e293b] border border-white/10 text-white text-[10px] font-bold uppercase tracking-widest opacity-0 group-hover:opacity-100 pointer-events-none transition-all duration-200 translate-x-2 group-hover:translate-x-0 whitespace-nowrap shadow-2xl z-50">
-        {label}
-        <div className="absolute left-[-4px] top-1/2 -translate-y-1/2 w-2 h-2 bg-[#1e293b] border-l border-b border-white/10 rotate-45" />
-      </div>
-    </div>
   )
 }

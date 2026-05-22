@@ -31,39 +31,44 @@ function AuthLayoutContent({ children }: { children: React.ReactNode }) {
     })
   }, [router])
 
-  // Set default titles based on path, but pages can override
   useEffect(() => {
-    if (pathname === '/profile') setTitle("Neural Identity Configuration")
-    else if (pathname === '/upload') setTitle("Video Ingestion Node")
-    else if (pathname === '/library') setTitle("Neural Knowledge Base")
-    else if (pathname === '/dashboard') setTitle("Control Center")
-    // Workspace sets its own title
+    if (pathname === '/profile') setTitle('Profile')
+    else if (pathname === '/upload') setTitle('Upload')
+    else if (pathname === '/library') setTitle('Knowledge Base')
+    else if (pathname === '/dashboard') setTitle('Library')
   }, [pathname, setTitle])
 
   if (isLoading) {
     return (
-      <div className="flex h-screen bg-[#0F172A] items-center justify-center">
-        <div className="w-12 h-12 rounded-xl accent-gradient animate-spin" />
+      <div className="flex h-screen bg-[#0A0A0C] items-center justify-center">
+        <div className="flex flex-col items-center gap-4">
+          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-violet-600 to-cyan-500 animate-pulse" />
+          <span className="text-xs text-zinc-500 font-medium tracking-widest uppercase">Loading</span>
+        </div>
       </div>
     )
   }
 
   return (
-    <div className="flex h-screen bg-[#0F172A] text-white overflow-hidden relative">
-      {/* Background Blur Effects */}
-      <div className="absolute top-[-100px] right-[-100px] w-[500px] h-[500px] bg-purple-600/10 blur-[120px] animate-pulse-slow pointer-events-none z-0" />
-      <div className="absolute bottom-[-100px] left-[-100px] w-[500px] h-[500px] bg-blue-600/10 blur-[120px] animate-pulse-slow pointer-events-none z-0" style={{ animationDelay: '2s' }} />
-      
+    <div className="flex h-screen bg-[#0A0A0C] text-white overflow-hidden relative">
+      {/* Background Orb Decorations */}
+      <div
+        className="holo-orb holo-orb-purple animate-orb-drift-slow"
+        style={{ width: 500, height: 500, top: -100, right: -50 }}
+      />
+      <div
+        className="holo-orb holo-orb-cyan animate-orb-drift"
+        style={{ width: 400, height: 400, bottom: -80, left: -80 }}
+      />
+
       <Sidebar />
-      
-      <main className="flex-1 flex flex-col overflow-hidden">
+
+      <main className="flex-1 flex flex-col overflow-hidden relative z-10">
         <Header title={title} />
-        
-        <div className="flex-1 overflow-auto relative z-10">
+        <div className="flex-1 overflow-y-auto">
           {children}
         </div>
       </main>
     </div>
   )
 }
-

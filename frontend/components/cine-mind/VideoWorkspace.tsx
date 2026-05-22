@@ -2,25 +2,20 @@
 
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { motion, AnimatePresence } from 'motion/react'
-import { Button } from '@/components/ui/button'
-import { Card } from '@/components/ui/card'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { ScrollArea } from '@/components/ui/scroll-area'
-import { Input } from '@/components/ui/input'
-import { 
-  Play, Pause, SkipBack, SkipForward, Volume2, Maximize, 
-  MessageSquare, BookOpen, FileText, Send, ChevronLeft,
-  MoreHorizontal, Share2, Download, Settings, Loader2
+import {
+  Play, Pause, Volume2, VolumeX, Maximize2, Loader2,
+  MessageSquare, FileText, BookOpen, BarChart3, Globe,
+  Send, ChevronLeft, ArrowUpRight
 } from 'lucide-react'
 import EmotionTimeline from './EmotionTimeline'
 import GlobalSummaryTab from './GlobalSummaryTab'
 import { chatWithVideo, connectProgressSocket } from '@/lib/api'
+import { cn } from '@/lib/utils'
 
 interface Message {
   id: string
   role: 'user' | 'ai'
   content: string
-  timestamp?: string
 }
 
 interface VideoWorkspaceProps {
@@ -36,465 +31,504 @@ interface VideoWorkspaceProps {
   onBack: () => void
 }
 
+const TABS = [
+  { id: 'chat',       label: 'AI Chat',    icon: MessageSquare },
+  { id: 'summary',    label: 'Summary',    icon: Globe         },
+  { id: 'emotions',   label: 'Emotions',   icon: BarChart3     },
+  { id: 'transcript', label: 'Transcript', icon: FileText      },
+  { id: 'chapters',   label: 'Chapters',   icon: BookOpen      },
+] as const
+
+type TabId = typeof TABS[number]['id']
+
 export default function VideoWorkspace({ video, onBack }: VideoWorkspaceProps) {
-  const [isPlaying, setIsPlaying] = useState(false)
+  const [isPlaying, setIsPlaying]   = useState(false)
+  const [isMuted, setIsMuted]       = useState(false)
   const [currentTime, setCurrentTime] = useState(0)
-  const [isTyping, setIsTyping] = useState(false)
-  const [messages, setMessages] = useState<Message[]>([
-    {
-      id: '1',
-      role: 'ai',
-      content: "Hello! I've analyzed this video. You can ask me anything about the content, or jump to specific moments using the transcript.",
-    }
+  const [activeTab, setActiveTab]   = useState<TabId>('chat')
+
+  const [messages, setMessages]     = useState<Message[]>([
+    { id: '1', role: 'ai', content: "I've analyzed this video. Ask me anything about the content, themes, or specific moments." }
   ])
-  const [input, setInput] = useState('')
-  const videoRef = useRef<HTMLVideoElement>(null)
-  const [chapters, setChapters] = useState<any[]>([])
+  const [input, setInput]       = useState('')
+  const [isTyping, setIsTyping] = useState(false)
+
+  const videoRef      = useRef<HTMLVideoElement>(null)
+  const messagesEndRef = useRef<HTMLDivElement>(null)
+  const inputRef      = useRef<HTMLInputElement>(null)
+
+  const [chapters, setChapters]     = useState<any[]>([])
   const [transcript, setTranscript] = useState<any[]>([])
-  const [streamUrl, setStreamUrl] = useState<string>('')
-  
-  // Processing States
-  const [processingStep, setProcessingStep] = useState<string>('Connecting to pipeline...')
-  const [processingProgress, setProcessingProgress] = useState<number>(0)
-  const [processingSeconds, setProcessingSeconds] = useState<number>(0)
-  const [emotionData, setEmotionData] = useState<any[]>([])
+  const [streamUrl, setStreamUrl]   = useState('')
+  const [emotionData, setEmotionData]     = useState<any[]>([])
   const [isEmotionsLoading, setIsEmotionsLoading] = useState(true)
-  // True once the WS reports 100% — hides the overlay regardless of video.status prop
+
+  const [processingStep, setProcessingStep]         = useState('Initializing analysis...')
+  const [processingProgress, setProcessingProgress] = useState(0)
+  const [processingSeconds, setProcessingSeconds]   = useState(0)
   const [isAnalysisComplete, setIsAnalysisComplete] = useState(video.status === 'ready')
 
-  // Resizable sidebar state
-  const [sidebarWidth, setSidebarWidth] = useState(300)
-  const isDragging = useRef(false)
-
-  // Fetch real chapters and transcript
+  // ----- Data loading -----
   const loadDetails = useCallback(async () => {
     try {
-      console.log(`[VideoWorkspace] Loading details for video ${video.id}`)
       const { fetchVideo, fetchTranscript, fetchEmotions } = await import('@/lib/api')
       const data = await fetchVideo(Number(video.id))
-      if (data.stream_url) {
-        setStreamUrl(data.stream_url)
-      }
-      if (data.chapters) {
-        console.log(`[VideoWorkspace] Loaded ${data.chapters.length} chapters`)
-        setChapters(data.chapters)
-      }
+      if (data.stream_url) setStreamUrl(data.stream_url)
+      if (data.chapters) setChapters(data.chapters)
       const transData = await fetchTranscript(Number(video.id))
-      console.log(`[VideoWorkspace] Loaded ${(transData || []).length} transcript segments`)
       setTranscript(transData || [])
-      
-      // Fetch real LLaMA-3 emotion data
       try {
         const emotions = await fetchEmotions(Number(video.id))
-        if (emotions && emotions.length > 0) {
-          console.log(`[VideoWorkspace] Loaded ${emotions.length} emotion buckets`)
-          setEmotionData(emotions)
-        }
-      } catch {
-        console.log('[VideoWorkspace] No emotion data yet')
-      } finally {
+        if (emotions?.length > 0) setEmotionData(emotions)
+      } catch { /* no emotions yet */ } finally {
         setIsEmotionsLoading(false)
       }
-    } catch (err) {
-      console.error('[VideoWorkspace] Failed to load video details:', err)
-    }
+    } catch { /* ignore */ }
   }, [video.id])
 
-  useEffect(() => {
-    loadDetails()
-  }, [loadDetails])
+  useEffect(() => { loadDetails() }, [loadDetails])
 
-  // Processing Timer
+  // Processing timer
   useEffect(() => {
-    let interval: NodeJS.Timeout
-    if (video.status === 'processing' || processingProgress > 0 && processingProgress < 100) {
-      interval = setInterval(() => setProcessingSeconds(s => s + 1), 1000)
-    }
-    return () => {
-      if (interval) clearInterval(interval)
-    }
-  }, [video.status, processingProgress])
+    if (isAnalysisComplete) return
+    const t = setInterval(() => setProcessingSeconds(s => s + 1), 1000)
+    return () => clearInterval(t)
+  }, [isAnalysisComplete])
 
-  // Connect WebSocket only if the video is still being processed
+  // WebSocket for processing status
   useEffect(() => {
-    if (video.status === 'ready') {
-      console.log(`[WS] video ${video.id} is already ready — skipping WebSocket`)
-      return
-    }
-    console.log(`[WS] Connecting progress socket for video ${video.id}`)
+    if (video.status === 'ready') return
     const ws = connectProgressSocket(Number(video.id), (data) => {
-      console.log('[WS] Pipeline progress:', data)
       if (data.step) setProcessingStep(data.step)
       if (typeof data.progress_pct === 'number') setProcessingProgress(data.progress_pct)
-      
-      // When pipeline completes, reload chapters/transcript and dismiss overlay
-      if (data.progress_pct >= 100) {
-        console.log('[WS] Pipeline complete — reloading details')
-        setIsAnalysisComplete(true)
-        loadDetails()
-      }
+      if (data.progress_pct >= 100) { setIsAnalysisComplete(true); loadDetails() }
     })
-    ws.onerror = (err) => console.error('[WS] WebSocket error:', err)
-    ws.onclose = () => console.log(`[WS] Socket closed for video ${video.id}`)
-    return () => {
-      console.log(`[WS] Closing socket for video ${video.id}`)
-      ws.close()
-    }
-  }, [video.id, video.status])
+    return () => ws.close()
+  }, [video.id, video.status, loadDetails])
 
-  const handleSendMessage = async () => {
-    if (!input.trim()) return
-    
-    const newUserMessage: Message = {
-      id: Date.now().toString(),
-      role: 'user',
-      content: input
-    }
-    
-    setMessages(prev => [...prev, newUserMessage])
-    setInput('')
-    setIsTyping(true)
+  // Auto-scroll chat
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }, [messages, isTyping])
 
-    try {
-      // Real FastAPI RAG call via Groq Llama 3
-      const response = await chatWithVideo(Number(video.id), input)
+  // ----- Handlers -----
+  const togglePlay = () => {
+    if (!videoRef.current) return
+    if (isPlaying) { videoRef.current.pause() } else { videoRef.current.play() }
+    setIsPlaying(!isPlaying)
+  }
 
-      const aiResponse: Message = {
-        id: (Date.now() + 1).toString(),
-        role: 'ai',
-        content: response.answer || "I'm sorry, I couldn't process that request.",
-        timestamp: response.timestamps?.[0]
-      }
-      setMessages(prev => [...prev, aiResponse])
-    } catch (error) {
-      console.error("Chat Error:", error)
-      const aiResponse: Message = {
-        id: (Date.now() + 1).toString(),
-        role: 'ai',
-        content: "I'm having trouble connecting to the AI engine right now. Please make sure the backend is running.",
-      }
-      setMessages(prev => [...prev, aiResponse])
-    } finally {
-      setIsTyping(false)
-    }
+  const toggleMute = () => {
+    if (!videoRef.current) return
+    videoRef.current.muted = !isMuted
+    setIsMuted(!isMuted)
   }
 
   const jumpToTimestamp = (timeStr: string) => {
     const [mins, secs] = timeStr.split(':').map(Number)
-    const totalSeconds = mins * 60 + secs
     if (videoRef.current) {
-      videoRef.current.currentTime = totalSeconds
+      videoRef.current.currentTime = mins * 60 + secs
       setIsPlaying(true)
       videoRef.current.play()
     }
   }
 
-  const togglePlay = () => {
-    if (videoRef.current) {
-      if (isPlaying) {
-        videoRef.current.pause()
-      } else {
-        videoRef.current.play()
-      }
-      setIsPlaying(!isPlaying)
-    }
+  const handleSend = async () => {
+    if (!input.trim()) return
+    const userMsg: Message = { id: Date.now().toString(), role: 'user', content: input }
+    setMessages(prev => [...prev, userMsg])
+    setInput('')
+    setIsTyping(true)
+    try {
+      const response = await chatWithVideo(Number(video.id), input)
+      setMessages(prev => [...prev, {
+        id: (Date.now() + 1).toString(),
+        role: 'ai',
+        content: response.answer || "Couldn't process that request."
+      }])
+    } catch {
+      setMessages(prev => [...prev, {
+        id: (Date.now() + 1).toString(),
+        role: 'ai',
+        content: "Unable to connect to AI engine. Please ensure the backend is running."
+      }])
+    } finally { setIsTyping(false) }
   }
 
-  // Handle spacebar play/pause
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.code === 'Space' && e.target === document.body) {
-        e.preventDefault()
-        togglePlay()
-      }
-    }
-    window.addEventListener('keydown', handleKeyDown)
-    return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [isPlaying])
-
-  // Handle mouse events for resizable sidebar
-  useEffect(() => {
-    const handleMouseMove = (e: MouseEvent) => {
-      if (!isDragging.current) return
-      // Calculate new width (window width - mouse X - some padding)
-      const newWidth = window.innerWidth - e.clientX - 12 // 12px for right padding
-      // Constrain width between 250px and 600px
-      if (newWidth > 250 && newWidth < 600) {
-        setSidebarWidth(newWidth)
-      }
-    }
-    const handleMouseUp = () => {
-      isDragging.current = false
-      document.body.style.cursor = 'default'
-      document.body.style.userSelect = 'auto'
-    }
-
-    window.addEventListener('mousemove', handleMouseMove)
-    window.addEventListener('mouseup', handleMouseUp)
-    return () => {
-      window.removeEventListener('mousemove', handleMouseMove)
-      window.removeEventListener('mouseup', handleMouseUp)
-    }
-  }, [])
+  const duration = videoRef.current?.duration
+  const progressPct = duration ? (currentTime / duration) * 100 : 0
+  const formatTime = (s: number) =>
+    `${Math.floor(s / 60)}:${Math.floor(s % 60).toString().padStart(2, '0')}`
 
   return (
-    <div className="flex flex-col h-full">
-      {/* Workspace Grid */}
-      <div 
-        className="flex-1 grid overflow-hidden p-3 gap-1"
-        style={{ gridTemplateColumns: `1fr 10px ${sidebarWidth}px` }}
-      >
-        {/* Left Column: Player, Timeline & Detailed Summary (Scrollable) */}
-        <ScrollArea className="flex flex-col bg-black/20 rounded-xl border border-white/5 overflow-hidden">
-          <div className="flex flex-col gap-3 p-3">
-            {/* Top part: Video Player */}
-            <Card className="relative aspect-video glass-panel overflow-hidden border-white/5 group bg-black/40 shrink-0">
-                {(!isAnalysisComplete && video.status === 'processing') && (
-                  <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-black/80 backdrop-blur-md">
-                    <Loader2 className="w-8 h-8 animate-spin text-purple-400 mb-4" />
-                    <div className="text-sm font-bold tracking-widest text-white uppercase mb-2">
-                      {processingStep}
+    <div className="flex flex-col lg:flex-row h-full lg:h-[calc(100vh-3.5rem)] bg-[#0A0A0C] overflow-hidden">
+
+      {/* ── LEFT COLUMN: Navigation, Player, Emotions ── */}
+      <div className="w-full lg:w-[40%] flex flex-col border-r border-white/[0.06] bg-[#0A0A0C] p-4 gap-4 overflow-y-auto shrink-0 min-w-0">
+        
+        {/* Navigation & Status Row */}
+        <div className="flex items-center justify-between gap-3 shrink-0">
+          <button
+            onClick={onBack}
+            className="flex items-center gap-1.5 text-zinc-400 hover:text-white transition-colors text-xs font-semibold"
+          >
+            <ChevronLeft className="w-4 h-4" />
+            Library
+          </button>
+          {isAnalysisComplete ? (
+            <span className="badge-green shrink-0">Ready</span>
+          ) : (
+            <span className="badge-amber shrink-0 flex items-center gap-1">
+              <Loader2 className="w-2.5 h-2.5 animate-spin" />
+              Analyzing
+            </span>
+          )}
+        </div>
+
+        {/* Video Player Card */}
+        <div className="holo-card overflow-hidden bg-black relative w-full aspect-video max-h-[260px] shadow-xl shrink-0">
+          {/* Processing overlay */}
+          {!isAnalysisComplete && video.status === 'processing' && (
+            <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-black/85 backdrop-blur-sm p-4 text-center">
+              <Loader2 className="w-8 h-8 animate-spin text-violet-400 mb-3" />
+              <p className="text-xs font-semibold text-white mb-2">{processingStep}</p>
+              <div className="w-48 h-1 bg-white/10 rounded-full overflow-hidden mb-1">
+                <div
+                  className="h-full rounded-full bg-gradient-to-r from-violet-500 to-cyan-400 transition-all duration-500"
+                  style={{ width: `${processingProgress}%` }}
+                />
+              </div>
+              <p className="text-[10px] text-zinc-500 font-mono">
+                {formatTime(processingSeconds)}
+              </p>
+            </div>
+          )}
+
+          <video
+            ref={videoRef}
+            src={streamUrl || video.stream_url || video.r2_url || ''}
+            className="w-full h-full object-contain cursor-pointer"
+            onClick={togglePlay}
+            onTimeUpdate={(e) => setCurrentTime(e.currentTarget.currentTime)}
+            onPlay={() => setIsPlaying(true)}
+            onPause={() => setIsPlaying(false)}
+          />
+
+          {/* Video controls overlay */}
+          <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/90 via-black/40 to-transparent px-3 pb-2 pt-6">
+            {/* Seek bar */}
+            <div
+              className="w-full h-1 bg-white/20 rounded-full mb-2 relative cursor-pointer group/seek"
+              onClick={(e) => {
+                if (!videoRef.current?.duration) return
+                const rect = e.currentTarget.getBoundingClientRect()
+                videoRef.current.currentTime =
+                  ((e.clientX - rect.left) / rect.width) * videoRef.current.duration
+              }}
+            >
+              <div
+                className="absolute inset-y-0 left-0 bg-gradient-to-r from-violet-500 to-cyan-400 rounded-full"
+                style={{ width: `${progressPct}%` }}
+              />
+              <div
+                className="absolute top-1/2 -translate-y-1/2 w-2.5 h-2.5 bg-white rounded-full shadow-lg opacity-0 group-hover/seek:opacity-100 transition-opacity"
+                style={{ left: `calc(${progressPct}% - 5px)` }}
+              />
+            </div>
+
+            {/* Controls row */}
+            <div className="flex items-center gap-2">
+              <button onClick={togglePlay} className="w-6.5 h-6.5 rounded-full bg-white flex items-center justify-center hover:scale-105 transition-transform shrink-0">
+                {isPlaying
+                  ? <Pause className="w-2.5 h-2.5 text-black fill-current" />
+                  : <Play className="w-2.5 h-2.5 text-black fill-current ml-0.5" />}
+              </button>
+
+              <button onClick={toggleMute} className="text-white/60 hover:text-white transition-colors shrink-0">
+                {isMuted ? <VolumeX className="w-3.5 h-3.5" /> : <Volume2 className="w-3.5 h-3.5" />}
+              </button>
+
+              <span className="text-[10px] font-mono text-white/60 tabular-nums shrink-0">
+                {formatTime(currentTime)} / {duration && !isNaN(duration) ? formatTime(duration) : video.duration}
+              </span>
+
+              <div className="flex-1" />
+
+              <button
+                onClick={() => videoRef.current?.requestFullscreen()}
+                className="text-white/60 hover:text-white transition-colors shrink-0"
+              >
+                <Maximize2 className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Emotion Timeline Card */}
+        <div className="holo-card p-4 flex flex-col flex-1 min-h-[260px] lg:min-h-0">
+          <div className="flex items-center justify-between mb-3 shrink-0">
+            <div>
+              <h3 className="text-xs font-bold text-white">Emotion Timeline</h3>
+              <p className="text-[10px] text-zinc-500 mt-0.5">Sentiment dynamics synced to video</p>
+            </div>
+            <div className="flex items-center gap-2">
+              {[
+                { label: 'Joy', color: '#4ADE80' },
+                { label: 'Anger', color: '#F87171' },
+                { label: 'Engagement', color: '#60A5FA' },
+              ].map(({ label, color }) => (
+                <div key={label} className="flex items-center gap-1">
+                  <div className="w-1.5 h-1.5 rounded-full" style={{ background: color }} />
+                  <span className="text-[9px] font-semibold text-zinc-400">{label}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+          
+          <div className="flex-1 min-h-[140px] relative">
+            <EmotionTimeline
+              emotionData={emotionData}
+              segments={transcript}
+              currentTime={currentTime}
+              isLoading={isEmotionsLoading}
+            />
+          </div>
+
+          {/* Mini Stats row */}
+          {emotionData.length > 0 && (
+            <div className="grid grid-cols-2 gap-2 mt-3 pt-3 border-t border-white/[0.04] shrink-0">
+              <div className="holo-inset p-2 flex flex-col justify-center">
+                <span className="text-[9px] uppercase font-bold tracking-wider text-zinc-500">Dominant Sentiment</span>
+                <span className="text-xs font-bold text-emerald-400 mt-0.5">Joyful / Positive</span>
+              </div>
+              <div className="holo-inset p-2 flex flex-col justify-center">
+                <span className="text-[9px] uppercase font-bold tracking-wider text-zinc-500">Engagement</span>
+                <span className="text-xs font-bold text-cyan-400 mt-0.5">High Peak</span>
+              </div>
+            </div>
+          )}
+        </div>
+
+      </div>
+
+      {/* ── RIGHT COLUMN: Interactive Tabs & Content ── */}
+      <div className="w-full lg:w-[60%] flex flex-col bg-[#111116] overflow-hidden relative">
+        
+        {/* Tab Navigation (sticky/header in right pane) */}
+        <div className="shrink-0 bg-[#111116] border-b border-white/[0.06] z-10">
+          <div className="flex items-center gap-0.5 px-4 overflow-x-auto scrollbar-none">
+            {TABS.map(({ id, label, icon: Icon }) => (
+              <button
+                key={id}
+                onClick={() => setActiveTab(id)}
+                className={cn(
+                  'flex items-center gap-2 px-4 py-3 text-xs font-semibold whitespace-nowrap transition-all border-b-2',
+                  activeTab === id
+                    ? 'text-violet-400 border-violet-400'
+                    : 'text-zinc-500 border-transparent hover:text-zinc-300'
+                )}
+              >
+                <Icon className="w-3.5 h-3.5" />
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Tab Contents (Independent scrolling container) */}
+        <div className="flex-1 overflow-y-auto p-4 min-h-0">
+          
+          {/* AI Chat */}
+          {activeTab === 'chat' && (
+            <div className="max-w-3xl mx-auto flex flex-col gap-3">
+              {messages.map((msg) => (
+                <motion.div
+                  key={msg.id}
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
+                >
+                  <div className={cn(
+                    'max-w-[85%] px-4 py-2.5 text-sm leading-relaxed',
+                    msg.role === 'user' ? 'chat-bubble-user' : 'chat-bubble-ai'
+                  )}>
+                    {msg.content.split(/(\[\d{2}:\d{2}\])/).map((part, i) =>
+                      part.match(/\[\d{2}:\d{2}\]/) ? (
+                        <button
+                          key={i}
+                          onClick={() => jumpToTimestamp(part.slice(1, -1))}
+                          className="timestamp-chip"
+                        >
+                          {part}
+                        </button>
+                      ) : part
+                    )}
+                  </div>
+                </motion.div>
+              ))}
+
+              {isTyping && (
+                <div className="flex justify-start">
+                  <div className="chat-bubble-ai px-4 py-2.5 flex gap-1.5 items-center">
+                    {[0, 0.15, 0.3].map(d => (
+                      <div key={d} className="w-1.5 h-1.5 rounded-full bg-zinc-500 animate-bounce" style={{ animationDelay: `${d}s` }} />
+                    ))}
+                  </div>
+                </div>
+              )}
+              <div ref={messagesEndRef} />
+            </div>
+          )}
+
+          {/* Summary Tab */}
+          {activeTab === 'summary' && (
+            <div className="max-w-3xl mx-auto">
+              <GlobalSummaryTab videoId={video.id} isAnalysisComplete={isAnalysisComplete} />
+            </div>
+          )}
+
+          {/* Emotions Tab */}
+          {activeTab === 'emotions' && (
+            <div className="max-w-3xl mx-auto flex flex-col gap-4">
+              <div className="holo-card p-5">
+                <h4 className="text-sm font-bold text-white mb-2">Emotion Metrics & Stats</h4>
+                <p className="text-xs text-zinc-500 leading-relaxed mb-4">
+                  CineMind analyzes audio transcript tone and visual markers to calculate real-time emotions. Look at the chart in the left side console to see how emotions align with video playback.
+                </p>
+
+                {emotionData.length > 0 ? (
+                  <div className="grid grid-cols-2 gap-3">
+                    {[
+                      { label: 'Dominant Emotion', value: 'Joy', badge: 'badge-green' },
+                      { label: 'Avg Sentiment', value: 'Positive', badge: 'badge-purple' },
+                      { label: 'Peak Engagement', value: 'High', badge: 'badge-cyan' },
+                      { label: 'Emotion Shifts', value: `${emotionData.length}`, badge: 'badge-amber' },
+                    ].map(({ label, value, badge }) => (
+                      <div key={label} className="holo-inset p-4">
+                        <p className="section-label mb-2">{label}</p>
+                        <span className={badge}>{value}</span>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="holo-inset p-8 text-center text-zinc-500 text-xs">
+                    Emotion detailed stats will display here once the analysis process finishes.
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Transcript Tab */}
+          {activeTab === 'transcript' && (
+            <div className="max-w-3xl mx-auto">
+              <div className="flex flex-col gap-1 pr-1">
+                {transcript.length > 0 ? transcript.map((item, i) => {
+                  const timeStr = `${Math.floor(item.start / 60).toString().padStart(2, '0')}:${Math.floor(item.start % 60).toString().padStart(2, '0')}`
+                  const isActive = currentTime >= item.start && currentTime <= item.end
+                  return (
+                    <div
+                      key={i}
+                      onClick={() => jumpToTimestamp(timeStr)}
+                      className={cn(
+                        'group flex gap-3 cursor-pointer p-2 rounded-lg transition-all',
+                        isActive
+                          ? 'bg-violet-500/10 border-l-2 border-violet-400 pl-3'
+                          : 'hover:bg-white/[0.03]'
+                      )}
+                    >
+                      <button className="timestamp-chip shrink-0 mt-0.5">{timeStr}</button>
+                      <p className={cn(
+                        'text-xs leading-relaxed transition-colors',
+                        isActive ? 'text-white font-medium' : 'text-zinc-400 group-hover:text-zinc-200'
+                      )}>
+                        {item.text}
+                      </p>
                     </div>
-                    <div className="w-64 h-2 bg-white/10 rounded-full overflow-hidden mb-4">
-                      <div 
-                        className="h-full accent-gradient transition-all duration-300"
-                        style={{ width: `${processingProgress}%` }}
-                      />
-                    </div>
-                    <div className="text-xs font-mono text-purple-300">
-                      Analysis Time: {Math.floor(processingSeconds / 60)}:{(processingSeconds % 60).toString().padStart(2, '0')}
+                  )
+                }) : (
+                  <div className="holo-card flex items-center justify-center py-16 text-center">
+                    <div>
+                      <FileText className="w-8 h-8 text-zinc-600 mx-auto mb-3" />
+                      <p className="text-sm text-zinc-500">Transcript will appear here once analysis is complete.</p>
                     </div>
                   </div>
                 )}
-                
-                <video 
-                  ref={videoRef}
-                  src={streamUrl || video.stream_url || video.r2_url || "https://storage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4"}
-                  className="w-full h-full object-contain bg-black/40 cursor-pointer"
-                  onClick={togglePlay}
-                  onTimeUpdate={(e) => setCurrentTime(e.currentTarget.currentTime)}
-                />
-                
-                {/* Custom Controls Overlay */}
-                <div className="absolute bottom-0 left-0 right-0 h-12 bg-gradient-to-t from-black/60 to-transparent flex items-center px-4 gap-3">
-                  <div className="w-7 h-7 bg-white rounded-full flex items-center justify-center cursor-pointer hover:scale-105 transition-transform" onClick={togglePlay}>
-                    {/* CSS Triangle for Play Icon */}
-                    {!isPlaying && (
-                      <div className="w-0 h-0 border-y-[5px] border-y-transparent border-l-[8px] border-l-black ml-0.5" />
-                    )}
-                    {isPlaying && <Pause className="w-3.5 h-3.5 text-black fill-current" />}
-                  </div>
-                  
-                  <div 
-                    className="flex-1 h-1.5 bg-white/10 rounded-full relative cursor-pointer group/seek"
-                    onClick={(e) => {
-                      if (!videoRef.current?.duration) return
-                      const rect = e.currentTarget.getBoundingClientRect()
-                      const clickX = e.clientX - rect.left
-                      const pct = Math.max(0, Math.min(1, clickX / rect.width))
-                      const seekTo = pct * videoRef.current.duration
-                      videoRef.current.currentTime = seekTo
-                      setCurrentTime(seekTo)
-                    }}
-                  >
-                    <div 
-                      className="absolute top-0 left-0 h-full accent-gradient rounded-full transition-none" 
-                      style={{ width: `${videoRef.current?.duration ? (currentTime / videoRef.current.duration) * 100 : 0}%` }}
-                    />
-                    {/* Hover scrub thumb */}
-                    <div
-                      className="absolute top-1/2 -translate-y-1/2 w-3 h-3 bg-white rounded-full shadow-lg opacity-0 group-hover/seek:opacity-100 transition-opacity pointer-events-none"
-                      style={{ left: `calc(${videoRef.current?.duration ? (currentTime / videoRef.current.duration) * 100 : 0}% - 6px)` }}
-                    />
-                  </div>
-                  
-                  <span className="text-[10px] font-mono font-medium text-white/80">
-                    {Math.floor(currentTime / 60)}:{Math.floor(currentTime % 60).toString().padStart(2, '0')} / {
-                      videoRef.current?.duration && !isNaN(videoRef.current.duration) 
-                        ? `${Math.floor(videoRef.current.duration / 60)}:${Math.floor(videoRef.current.duration % 60).toString().padStart(2, '0')}`
-                        : video.duration
-                    }
-                  </span>
-                </div>
-            </Card>
-
-            {/* Emotion Timeline */}
-            <Card className="h-[140px] glass-panel border-white/5 p-3 flex flex-col shrink-0">
-              <div className="flex items-center justify-between mb-2">
-                <h3 className="text-[10px] font-black text-slate-300 uppercase tracking-[0.2em]">Emotion Synthesis Timeline</h3>
-                <div className="flex items-center gap-3">
-                  <div className="flex items-center gap-1.5">
-                    <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(34,197,94,0.4)]" />
-                    <span className="text-[9px] text-slate-400 uppercase font-bold tracking-widest">Joy</span>
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <div className="w-1.5 h-1.5 rounded-full bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.4)]" />
-                    <span className="text-[9px] text-slate-400 uppercase font-bold tracking-widest">Anger</span>
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <div className="w-1.5 h-1.5 rounded-full bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.4)]" />
-                    <span className="text-[9px] text-slate-400 uppercase font-bold tracking-widest">Engagement</span>
-                  </div>
-                </div>
               </div>
-              <div className="flex-1 opacity-80 overflow-hidden">
-                <EmotionTimeline emotionData={emotionData} segments={transcript} currentTime={currentTime} isLoading={isEmotionsLoading} />
-              </div>
-            </Card>
-
-            {/* Detailed Global Summary */}
-            <Card className="glass-panel border-white/5 overflow-hidden flex flex-col shrink-0 min-h-[500px]">
-              <GlobalSummaryTab videoId={video.id} isAnalysisComplete={isAnalysisComplete} />
-            </Card>
-          </div>
-        </ScrollArea>
-
-        {/* Draggable Divider */}
-        <div 
-          className="flex items-center justify-center cursor-col-resize group px-1"
-          onMouseDown={() => {
-            isDragging.current = true
-            document.body.style.cursor = 'col-resize'
-            document.body.style.userSelect = 'none'
-          }}
-        >
-          <div className="w-1 h-12 bg-white/10 rounded-full group-hover:bg-purple-500/50 transition-colors" />
-        </div>
-
-        {/* Right Column: AI Engine */}
-        <Card className="glass-panel border-white/5 flex flex-col overflow-hidden">
-          <Tabs defaultValue="chat" className="flex-1 flex flex-col overflow-hidden">
-            <div className="p-2 border-b border-white/5">
-              <TabsList className="w-full bg-transparent h-auto p-0 gap-0.5">
-                {[
-                  { val: 'transcript', label: 'Transcript' },
-                  { val: 'chapters', label: 'Chapters' },
-                  { val: 'chat', label: 'AI Chat' }
-                ].map((tab) => (
-                  <TabsTrigger 
-                    key={tab.val} 
-                    value={tab.val} 
-                    className="flex-1 py-1.5 text-[10px] font-bold rounded-md data-[state=active]:bg-white/5 data-[state=active]:text-white text-slate-500 uppercase tracking-wider transition-all"
-                  >
-                    {tab.label}
-                  </TabsTrigger>
-                ))}
-              </TabsList>
             </div>
+          )}
 
-            <TabsContent value="chat" className="flex-1 flex flex-col overflow-hidden m-0 p-0">
-
-                <ScrollArea className="flex-1 p-4">
-                  <div className="flex flex-col gap-3">
-                    {messages.map((msg) => (
-                      <div key={msg.id} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                        <div className={`
-                          max-w-[90%] p-2.5 px-3.5 rounded-xl text-[12px] leading-snug
-                          ${msg.role === 'user' 
-                            ? 'accent-gradient text-white rounded-br-none shadow-lg' 
-                            : 'bg-white/[0.04] text-slate-200 border border-white/5 rounded-bl-none'}
-                        `}>
-                          {msg.content.split(/(\[\d{2}:\d{2}\])/).map((part, i) => {
-                            if (part.match(/\[\d{2}:\d{2}\]/)) {
-                              return (
-                                <button 
-                                  key={i}
-                                  onClick={() => jumpToTimestamp(part.slice(1, -1))}
-                                  className="timestamp-badge"
-                                >
-                                  {part}
-                                </button>
-                              )
-                            }
-                            return part
-                          })}
-                        </div>
+          {/* Chapters Tab */}
+          {activeTab === 'chapters' && (
+            <div className="max-w-3xl mx-auto flex flex-col gap-3">
+              {chapters.length > 0 ? chapters.map((chapter, i) => {
+                const timeStr = `${Math.floor(chapter.start_time / 60).toString().padStart(2, '0')}:${Math.floor(chapter.start_time % 60).toString().padStart(2, '0')}`
+                return (
+                  <motion.div
+                    key={i}
+                    initial={{ opacity: 0, y: 8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: i * 0.05 }}
+                    onClick={() => jumpToTimestamp(timeStr)}
+                    className="holo-card p-4 cursor-pointer hover:border-violet-500/30 transition-colors group"
+                  >
+                    <div className="flex items-start gap-3">
+                      <div className="w-7 h-7 rounded-lg bg-violet-500/10 border border-violet-500/20 flex items-center justify-center shrink-0 group-hover:bg-violet-500/20 transition-colors">
+                        <span className="text-[10px] font-bold text-violet-400">{String(i + 1).padStart(2, '0')}</span>
                       </div>
-                    ))}
-                    {isTyping && (
-                      <div className="flex justify-start">
-                        <div className="bg-white/5 p-2 px-3 rounded-xl rounded-bl-none flex gap-1">
-                          {[0, 0.2, 0.4].map((delay) => (
-                            <div key={delay} className="w-0.5 h-0.5 bg-slate-500 rounded-full animate-bounce" style={{ animationDelay: `${delay}s` }} />
-                          ))}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between gap-2 mb-1">
+                          <h4 className="text-xs font-semibold text-white group-hover:text-violet-300 transition-colors truncate">
+                            {chapter.title}
+                          </h4>
+                          <button className="timestamp-chip shrink-0">{timeStr}</button>
                         </div>
+                        <p className="text-[11px] text-zinc-500 leading-relaxed">{chapter.summary}</p>
                       </div>
-                    )}
-                  </div>
-                </ScrollArea>
-                
-                <div className="p-3 border-t border-white/5 bg-black/10">
-                  <div className="relative">
-                    <Input 
-                      placeholder="Ask CineMind AI..." 
-                      className="h-9 bg-white/5 border-white/5 rounded-lg text-[11px] px-3 pr-9 focus:border-purple-500 focus:bg-white/10 transition-all placeholder:text-slate-600"
-                      value={input}
-                      onChange={(e) => setInput(e.target.value)}
-                      onKeyDown={(e) => e.key === 'Enter' && handleSendMessage()}
-                    />
-                    <Button 
-                      size="icon" 
-                      variant="ghost"
-                      className="absolute right-0.5 top-0.5 h-8 w-8 text-slate-500 hover:text-white"
-                      onClick={handleSendMessage}
-                    >
-                      <Send className="w-3.5 h-3.5" />
-                    </Button>
+                    </div>
+                  </motion.div>
+                )
+              }) : (
+                <div className="holo-card flex items-center justify-center py-16 text-center">
+                  <div>
+                    <BookOpen className="w-8 h-8 text-zinc-600 mx-auto mb-3" />
+                    <p className="text-sm text-zinc-500">Chapters will appear here once analysis is complete.</p>
                   </div>
                 </div>
-              </TabsContent>
+              )}
+            </div>
+          )}
 
-              <TabsContent value="transcript" className="flex-1 overflow-hidden m-0">
-                <ScrollArea className="h-full p-4">
-                  <div className="space-y-3">
-                    {transcript.length > 0 ? transcript.map((item, i) => {
-                      const timeStr = `${Math.floor(item.start / 60).toString().padStart(2, '0')}:${Math.floor(item.start % 60).toString().padStart(2, '0')}`
-                      return (
-                        <div 
-                          key={i} 
-                          className={`group flex gap-2.5 cursor-pointer p-1.5 rounded-lg transition-all ${currentTime >= item.start && currentTime <= item.end ? 'bg-purple-500/10 border-l-2 border-purple-500' : 'hover:bg-white/5'}`}
-                          onClick={() => jumpToTimestamp(timeStr)}
-                        >
-                          <span className="text-[10px] font-mono text-[#60A5FA] mt-0.5 opacity-80">{timeStr}</span>
-                          <p className="high-density-text group-hover:text-white transition-colors">
-                            {item.text}
-                          </p>
-                        </div>
-                      )
-                    }) : (
-                      <p className="text-sm text-slate-500 p-4">Loading transcript...</p>
-                    )}
-                  </div>
-                </ScrollArea>
-              </TabsContent>
-
-              <TabsContent value="chapters" className="flex-1 overflow-hidden m-0">
-                <ScrollArea className="h-full p-4">
-                  <div className="space-y-2.5">
-                    {chapters.length > 0 ? chapters.map((chapter, i) => {
-                      const timeStr = `${Math.floor(chapter.start_time / 60).toString().padStart(2, '0')}:${Math.floor(chapter.start_time % 60).toString().padStart(2, '0')}`
-                      return (
-                        <div 
-                          key={i} 
-                          className="p-2.5 rounded-xl border border-white/5 bg-white/[0.03] hover:border-purple-500/30 cursor-pointer transition-all group"
-                          onClick={() => jumpToTimestamp(timeStr)}
-                        >
-                          <div className="flex items-center justify-between mb-0.5">
-                            <h4 className="font-bold text-[10px] text-slate-200 group-hover:text-purple-400">0{i+1}. {chapter.title}</h4>
-                            <span className="text-[9px] font-mono text-[#60A5FA] opacity-70">{timeStr}</span>
-                          </div>
-                          <p className="text-[10px] text-slate-500 leading-tight">{chapter.summary}</p>
-                        </div>
-                      )
-                    }) : (
-                      <p className="text-sm text-slate-500 p-4">Loading chapters...</p>
-                    )}
-                  </div>
-                </ScrollArea>
-              </TabsContent>
-            </Tabs>
-          </Card>
         </div>
+
+        {/* Input Bar docked at the absolute bottom of the right panel, but only when we are in the chat tab */}
+        {activeTab === 'chat' && (
+          <div className="p-4 border-t border-white/[0.06] bg-[#111116] shrink-0 z-10">
+            <div className="max-w-3xl mx-auto">
+              <div className="holo-card flex items-center gap-3 p-3">
+                <input
+                  ref={inputRef}
+                  placeholder="Ask anything about this video…"
+                  className="flex-1 bg-transparent text-sm text-white placeholder:text-zinc-600 outline-none"
+                  value={input}
+                  onChange={(e) => setInput(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && handleSend()}
+                />
+                <button
+                  onClick={handleSend}
+                  disabled={!input.trim() || isTyping}
+                  className="w-8 h-8 rounded-lg bg-gradient-to-br from-violet-600 to-cyan-500 flex items-center justify-center hover:opacity-90 transition-opacity disabled:opacity-40 shrink-0"
+                >
+                  <Send className="w-3.5 h-3.5 text-white" />
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+      </div>
+
     </div>
   )
 }
+

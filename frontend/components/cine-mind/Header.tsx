@@ -1,8 +1,7 @@
 'use client'
 
 import { useRouter } from 'next/navigation'
-import { Button } from '@/components/ui/button'
-import { Share2, Download, LogOut, User } from 'lucide-react'
+import { Share2, Download, LogOut, User, Clapperboard } from 'lucide-react'
 import { authClient } from '@/lib/auth-client'
 import {
   DropdownMenu,
@@ -18,7 +17,7 @@ interface HeaderProps {
   title?: string
 }
 
-export default function Header({ title = "CineMind.studio" }: HeaderProps) {
+export default function Header({ title = "CineMind" }: HeaderProps) {
   const router = useRouter()
 
   const handleLogout = async () => {
@@ -26,41 +25,69 @@ export default function Header({ title = "CineMind.studio" }: HeaderProps) {
     router.push('/')
   }
 
-  const handleProfileClick = () => {
-    router.push('/profile')
-  }
-
   return (
-    <header className="h-14 glass-header flex items-center justify-between px-6 transition-all z-20 shrink-0">
-      <div className="flex items-center gap-4">
-        <h2 className="font-black text-lg accent-text tracking-tighter truncate max-w-[300px]">{title}</h2>
-        <div className="px-2 py-0.5 rounded-full bg-amber-500/10 text-[9px] font-bold text-amber-500 border border-amber-500/20 uppercase tracking-widest hidden sm:block">
-          Node Status: Operational
+    <header className="holo-header h-14 flex items-center justify-between px-5 shrink-0 z-20">
+      {/* Left: Logo + Title */}
+      <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2">
+          <Clapperboard className="w-4 h-4 text-violet-400" />
+          <span className="text-sm font-bold text-white">{title}</span>
+        </div>
+
+        <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-full border border-emerald-500/20 bg-emerald-500/[0.06]">
+          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+          <span className="text-[10px] font-semibold text-emerald-400">Operational</span>
         </div>
       </div>
-      <div className="flex items-center gap-4">
-        <div className="flex items-center gap-1">
-          <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:text-white hover:bg-white/5"><Share2 className="w-3.5 h-3.5" /></Button>
-          <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:text-white hover:bg-white/5"><Download className="w-3.5 h-3.5" /></Button>
-        </div>
-        
+
+      {/* Right: Actions + Avatar */}
+      <div className="flex items-center gap-2">
+        <button className="btn-icon">
+          <Share2 className="w-4 h-4" />
+        </button>
+        <button className="btn-icon">
+          <Download className="w-4 h-4" />
+        </button>
+
+        <div className="w-px h-5 bg-white/10 mx-1" />
+
         <DropdownMenu>
-          <DropdownMenuTrigger className="w-8 h-8 rounded-full bg-slate-700/50 border border-white/10 flex items-center justify-center cursor-pointer hover:border-purple-500/50 transition-colors overflow-hidden outline-none">
-             <User className="w-4 h-4 text-slate-400" />
+          {/* Style the trigger directly — Base UI's Trigger renders as a button; no asChild needed */}
+          <DropdownMenuTrigger
+            className="w-8 h-8 rounded-full bg-gradient-to-br from-violet-600/30 to-cyan-500/30 border border-violet-500/30 flex items-center justify-center hover:border-violet-500/60 transition-colors outline-none cursor-pointer"
+          >
+            <User className="w-3.5 h-3.5 text-violet-300" />
           </DropdownMenuTrigger>
-          <DropdownMenuContent className="w-56 glass-panel border-white/10 bg-[#0F172A]/90 backdrop-blur-xl text-white">
+
+          <DropdownMenuContent
+            align="end"
+            className="w-52 bg-[#18181F] border border-white/10 text-white rounded-xl shadow-2xl overflow-hidden p-1"
+          >
+            {/* DropdownMenuLabel must be inside DropdownMenuGroup (Base UI requirement) */}
             <DropdownMenuGroup>
-              <DropdownMenuLabel className="text-[10px] uppercase font-black tracking-widest text-slate-500">Node Administrator</DropdownMenuLabel>
+              <DropdownMenuLabel className="text-[10px] uppercase font-bold tracking-widest text-zinc-500 px-2 py-2">
+                Account
+              </DropdownMenuLabel>
             </DropdownMenuGroup>
-            <DropdownMenuSeparator className="bg-white/5" />
-            <DropdownMenuItem onClick={handleProfileClick} className="text-xs font-bold hover:bg-white/5 cursor-pointer focus:bg-white/5">
-              <User className="mr-2 h-4 w-4" />
-              Neural Profile
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={handleLogout} className="text-xs font-bold text-red-400 hover:bg-red-400/10 cursor-pointer focus:bg-red-400/10">
-              <LogOut className="mr-2 h-4 w-4" />
-              Terminate Session
-            </DropdownMenuItem>
+
+            <DropdownMenuSeparator className="bg-white/[0.06] mx-1" />
+
+            <DropdownMenuGroup>
+              <DropdownMenuItem
+                onClick={() => router.push('/profile')}
+                className="text-sm font-medium text-zinc-300 hover:text-white hover:bg-white/[0.06] cursor-pointer rounded-lg px-2 py-2 flex items-center gap-2"
+              >
+                <User className="w-4 h-4 text-violet-400" />
+                Profile
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={handleLogout}
+                className="text-sm font-medium text-red-400 hover:text-red-300 hover:bg-red-500/[0.08] cursor-pointer rounded-lg px-2 py-2 flex items-center gap-2"
+              >
+                <LogOut className="w-4 h-4" />
+                Sign out
+              </DropdownMenuItem>
+            </DropdownMenuGroup>
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
