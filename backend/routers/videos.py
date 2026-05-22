@@ -115,14 +115,14 @@ async def upload_youtube(
     # client emulations (like ios, mweb, android_vr) which bypass bot detection more
     # reliably, and merge different audio/video streams to mp4 automatically.
     ydl_opts = {
-        'format': 'bestvideo[height<=480]+bestaudio/best[height<=480]/best',
+        'format': '(bv*[height<=480]+ba/b[height<=480])/b',
         'merge_output_format': 'mp4',
         'outtmpl': os.path.join(
             tempfile.gettempdir(),
             '%(id)s.%(ext)s'
         ),
-        'quiet': True,
-        'no_warnings': True,
+        'quiet': False,
+        'no_warnings': False,
         'http_headers': {
             'User-Agent': (
                 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) '
@@ -130,9 +130,14 @@ async def upload_youtube(
                 'Chrome/124.0.0.0 Safari/537.36'
             ),
         },
-        'retries': 5,
-        'fragment_retries': 5,
+        'retries': 10,
+        'fragment_retries': 10,
         'noplaylist': True,
+        'extractor_args': {
+            'youtube': {
+                'player_client': ['android', 'web']
+            }
+        }
     }
     
     # Support cookies file to bypass YouTube's datacenter bot detection
@@ -154,13 +159,28 @@ async def upload_youtube(
     
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            print("[Upload] Extracting info...")
             info = await asyncio.to_thread(ydl.extract_info, request.url, download=True)
             video_title = info.get('title', 'YouTube Video')
-            file_path = ydl.prepare_filename(info)
+            
+            downloaded_file = ydl.prepare_filename(info)
+            base, _ = os.path.splitext(downloaded_file)
+            
+            possible_files = [
+                base + ".mp4",
+                base + ".mkv",
+                base + ".webm",
+            ]
+            
+            file_path = next((f for f in possible_files if os.path.exists(f)), None)
+            
+            if not file_path:
+                raise Exception("Downloaded file not found")
+                
             # if ext is webm, it's fine.
             file_ext = file_path.rsplit(".", 1)[-1].lower()
     except Exception as e:
-        print(f"[Upload] ✗ yt-dlp failed: {e}")
+        print(f"[Upload] ERROR yt-dlp failed: {e}")
         raise HTTPException(status_code=400, detail=f"Failed to download YouTube video: {e}")
 
     r2_key = f"videos/{user_id}/{uuid.uuid4()}.{file_ext}"
